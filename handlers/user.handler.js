@@ -1,6 +1,6 @@
 require('dotenv').config();
 const TonWeb = require("tonweb");
-const { tasksKeyboard, startKeyboard, authKeyboard, adminKeyboard, commands } = require('../utils/keyboards');
+const { tasksKeyboard, authKeyboard, adminKeyboard, commands } = require('../utils/keyboards');
 const ErrorHandler = require('../utils/error.handler'); 
 
 class UserHandler {
@@ -75,12 +75,13 @@ class UserHandler {
 
     try {
       const user = await this.userRepository.getUserById(chatId);
+      const wallet = user[0]?.wallet;
+      
       if (user.length === 0) {
         await this.userRepository.addUser(chatId, username, '', referralCode);
       }
 
-      const isUserNewOrWalletMissing = user.length === 0 || !user[0].wallet;
-      const keyboard = isUserNewOrWalletMissing ? startKeyboard : (chatId.toString() === this.adminId ? adminKeyboard : authKeyboard);
+      const keyboard = chatId.toString() === this.adminId ? adminKeyboard(wallet) : authKeyboard(wallet);
 
       this.bot.sendMessage(chatId, 'Добро пожаловать в бота!', keyboard);
     } catch (error) {
@@ -100,10 +101,11 @@ class UserHandler {
     try {
       const user = await this.userRepository.getUserById(chatId);
 
-      if (user[0]?.wallet && (user[0]?.task_points !== null && user[0]?.lesson_points !== null && user[0]?.ref_points !== null)) {
+      if (user[0]?.task_points !== null && user[0]?.lesson_points !== null && user[0]?.ref_points !== null) {
         const totalPoints = user[0]?.task_points + user[0]?.lesson_points + user[0]?.ref_points;
-        
-        this.bot.sendMessage(chatId, `Текущий кошелек:\n<code>${user[0].wallet}</code>\n\nВыполнение заданий: ${user[0].task_points}\nОткрытие уроков: ${user[0].lesson_points}\nПриглашение друзей: ${user[0].ref_points}\nВсего очков: ${totalPoints}`, { parse_mode: "HTML" });
+        const wallet = user[0]?.wallet ? user[0]?.wallet : 'не установлен.';
+
+        this.bot.sendMessage(chatId, `Текущий кошелек:\n<code>${wallet}</code>\n\nВыполнение заданий: ${user[0].task_points}\nОткрытие уроков: ${user[0].lesson_points}\nПриглашение друзей: ${user[0].ref_points}\nВсего очков: ${totalPoints}`, { parse_mode: "HTML" });
       } else {
         this.bot.sendMessage(chatId, 'Ошибка получения кошелька.');
       }
@@ -160,7 +162,7 @@ class UserHandler {
       await this.userRepository.updateUserWallet(chatId, wallet);
       this.clearUserState(chatId);
 
-      const keyboard = chatId.toString() === this.adminId ? adminKeyboard : authKeyboard;
+      const keyboard = chatId.toString() === this.adminId ? adminKeyboard(wallet) : authKeyboard(wallet);
       this.bot.sendMessage(chatId, 'Кошелек успешно установлен!', keyboard);
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);

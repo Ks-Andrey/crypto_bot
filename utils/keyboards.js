@@ -8,30 +8,25 @@ const commands = {
     tasks: 'Задания'
 };
 
-const startKeyboard = {
-    reply_markup: {
-        keyboard: [
-            [commands.add_wallet]
-        ],
-        resize_keyboard: true
+const authKeyboard = (wallet) => {
+    return {
+        reply_markup: {
+            keyboard: [
+                [commands.wallet, wallet ? commands.change_wallet : commands.add_wallet], [commands.add_ref, commands.library], [commands.tasks]
+            ], 
+            resize_keyboard: true
+        }
     }
 }
 
-const authKeyboard = {
-    reply_markup: {
-        keyboard: [
-            [commands.wallet, commands.change_wallet], [commands.add_ref, commands.library], [commands.tasks]
-        ], 
-        resize_keyboard: true
-    }
-}
-
-const adminKeyboard = {
-    reply_markup: {
-        keyboard: [
-            [commands.wallet, commands.change_wallet], [commands.add_ref, commands.library], [commands.broadcast], [commands.tasks]
-        ], 
-        resize_keyboard: true
+const adminKeyboard = (wallet) => {
+    return {
+        reply_markup: {
+            keyboard: [
+                [commands.wallet, wallet ? commands.change_wallet : commands.add_wallet], [commands.add_ref, commands.library], [commands.broadcast], [commands.tasks]
+            ], 
+            resize_keyboard: true
+        }
     }
 }
 
@@ -45,4 +40,4 @@ const tasksKeyboard = {
     resize_keyboard: true
 }
 
-module.exports = {tasksKeyboard, startKeyboard, authKeyboard, adminKeyboard, commands }; 
+module.exports = {tasksKeyboard, authKeyboard, adminKeyboard, commands }; 

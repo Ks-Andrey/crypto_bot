@@ -13,17 +13,19 @@ CREATE TABLE Users (
     task_points INTEGER DEFAULT 0 NOT NULL
 );
 
-CREATE VIEW USERS_LIST AS
-SELECT * FROM USERS WHERE wallet <> NULL OR wallet <> '';
+drop view USERS_LIST;
+-- CREATE VIEW USERS_LIST AS
+-- SELECT * FROM USERS WHERE wallet <> NULL OR wallet <> '';
 
 ALTER TABLE Users
 ADD CONSTRAINT unique_wallet UNIQUE (wallet);
 
+--изменена
 drop function get_all_users;
 CREATE OR REPLACE FUNCTION get_all_users()
-RETURNS SETOF USERS_LIST AS $$
+RETURNS SETOF USERS AS $$
 BEGIN
-    RETURN QUERY SELECT * FROM USERS_LIST;
+    RETURN QUERY SELECT * FROM USERS;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -35,39 +37,47 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 drop function get_users_by_wallet;
 CREATE OR REPLACE FUNCTION get_users_by_wallet(input_wallet VARCHAR)
-RETURNS SETOF USERS_LIST AS $$
+RETURNS SETOF USERS AS $$
 BEGIN
-    RETURN QUERY SELECT * FROM USERS_LIST WHERE wallet = input_wallet;
+    RETURN QUERY SELECT * FROM USERS WHERE wallet = input_wallet;
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 drop function search_users;
 CREATE OR REPLACE FUNCTION search_users(search_text TEXT)
-RETURNS SETOF USERS_LIST AS $$
+RETURNS TABLE (
+    ID NUMERIC,
+    name VARCHAR(255),
+    wallet VARCHAR(255),
+    ref_id NUMERIC
+)
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
-        id, 
-        name, 
-        wallet, 
-        ref_id
+        USERS.id, 
+        USERS.name, 
+        USERS.wallet, 
+        USERS.ref_id
     FROM 
-        USERS_LIST
+        USERS
     WHERE
-        (name ILIKE '%' || search_text || '%')
-        OR (wallet ILIKE '%' || search_text || '%')
-        OR (id::TEXT ILIKE '%' || search_text || '%');
+        (USERS.name ILIKE '%' || search_text || '%')
+        OR (USERS.wallet ILIKE '%' || search_text || '%')
+        OR (USERS.id::TEXT ILIKE '%' || search_text || '%');
 END;
 $$ LANGUAGE plpgsql;
 
----тут оставляем user-list
+--изменено
 drop function get_user_referrals;
 CREATE OR REPLACE FUNCTION get_user_referrals(input_user_id NUMERIC)
-RETURNS SETOF USERS_LIST AS $$
+RETURNS SETOF USERS AS $$
 BEGIN
-    RETURN QUERY SELECT * FROM USERS_LIST WHERE ref_id = input_user_id;
+    RETURN QUERY SELECT * FROM USERS WHERE ref_id = input_user_id AND wallet <> '' AND wallet IS NOT NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -508,7 +518,6 @@ GRANT SELECT ON USERS_LIST TO crypto_user;
 
 GRANT SELECT ON TABLE ADMINS TO crypto_admin;
 
-----------------------------------------------------
 CREATE OR REPLACE FUNCTION get_task_users(p_task_id INTEGER)
 RETURNS TABLE(
     ID NUMERIC,
@@ -536,3 +545,17 @@ BEGIN
         CONFIRM_TASKS.TASK_ID = p_task_id;
 END;
 $$ LANGUAGE plpgsql;
+
+--индексы
+CREATE INDEX idx_users_wallet ON Users(wallet);
+
+CREATE INDEX idx_users_ref_id ON Users(ref_id);
+
+CREATE INDEX idx_tasks_is_deleted ON Tasks(is_deleted);
+
+CREATE INDEX idx_confirm_tasks_task_id ON CONFIRM_TASKS(task_id);
+
+CREATE INDEX idx_confirm_tasks_user_id ON CONFIRM_TASKS(user_id);
+
+CREATE INDEX idx_users_name ON Users(name);
+CREATE INDEX idx_users_id ON Users(id);
