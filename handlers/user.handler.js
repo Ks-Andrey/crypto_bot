@@ -49,6 +49,8 @@ class UserHandler {
       if (data.startsWith('task_')) {
         await this.processTaskSelection(chatId, data, callbackQuery.message.message_id);
       } else if (data.startsWith('done_')) {
+        await this.proccessConfirmTask(chatId, data, callbackQuery.message.message_id);
+      } else if (data.startsWith('confirm_')){
         await this.processTaskCompletion(chatId, data, callbackQuery.message.message_id);
       } else if (data.startsWith('archive_')) {
         await this.processArchiveSelection(chatId, data, callbackQuery.message.message_id); 
@@ -249,6 +251,16 @@ class UserHandler {
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
+  }
+
+  async proccessConfirmTask(chatId, data, messageId) {
+    const taskId = parseInt(data.split('_')[1], 10);
+
+    this.bot.editMessageText('Вы уверены?', {
+      chat_id: chatId, 
+      message_id: messageId,
+      reply_markup: { inline_keyboard: [[{ text: 'Да', callback_data: `confirm_${taskId}`}, { text: 'Нет', callback_data: 'back'}]] }
+    })
   }
 
   async openArchiveList(chatId, messageId) {
