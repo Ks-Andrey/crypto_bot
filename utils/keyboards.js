@@ -1,32 +1,28 @@
 const commands = {
+    statistics: 'Статистика',
     wallet: 'Профиль', 
-    change_wallet: 'Изменить кошелек', 
     add_ref: 'Пригласить друзей',
     broadcast: 'Сделать рассылку',
     add_wallet: 'Добавить кошелек',
     library: 'Библиотека',
-    tasks: 'Задания'
+    tasks: 'Задания',
 };
 
-const authKeyboard = (wallet) => {
-    return {
-        reply_markup: {
-            keyboard: [
-                [commands.wallet, wallet ? commands.change_wallet : commands.add_wallet], [commands.add_ref, commands.library], [commands.tasks]
-            ], 
-            resize_keyboard: true
-        }
+const authKeyboard = {
+    reply_markup: {
+        keyboard: [
+            [commands.wallet, commands.add_ref,], [commands.library, commands.tasks], [commands.statistics]
+        ], 
+        resize_keyboard: true
     }
 }
 
-const adminKeyboard = (wallet) => {
-    return {
-        reply_markup: {
-            keyboard: [
-                [commands.wallet, wallet ? commands.change_wallet : commands.add_wallet], [commands.add_ref, commands.library], [commands.broadcast], [commands.tasks]
-            ], 
-            resize_keyboard: true
-        }
+const adminKeyboard = {
+    reply_markup: {
+        keyboard: [
+            [commands.wallet, commands.add_ref], [commands.tasks, commands.library], [commands.broadcast, commands.statistics]
+        ], 
+        resize_keyboard: true
     }
 }
 
@@ -40,4 +36,14 @@ const tasksKeyboard = {
     resize_keyboard: true
 }
 
-module.exports = {tasksKeyboard, authKeyboard, adminKeyboard, commands }; 
+const lessonsKeyboard = {
+    inline_keyboard: [
+      [
+        { text: 'Базовый курс', callback_data: `default_lessons` },
+        { text: 'Расширенный курс', callback_data: `extended_lessons` }
+      ]
+    ],
+    resize_keyboard: true
+}
+
+module.exports = {lessonsKeyboard, tasksKeyboard, authKeyboard, adminKeyboard, commands }; 

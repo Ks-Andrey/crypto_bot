@@ -1,13 +1,17 @@
 require('dotenv').config();
 const TonWeb = require("tonweb");
-const { tasksKeyboard, authKeyboard, adminKeyboard, commands } = require('../utils/keyboards');
+const { tasksKeyboard, authKeyboard, adminKeyboard, commands, lessonsKeyboard } = require('../utils/keyboards');
 const ErrorHandler = require('../utils/error.handler'); 
 
 class UserHandler {
-  constructor(bot, userRepository, adminId) {
+  constructor(bot, userRepository, taskRepository, lessonRepository, adminId) {
     this.adminId = adminId;
     this.bot = bot;
+
     this.userRepository = userRepository;
+    this.taskRepository = taskRepository;
+    this.lessonRepository = lessonRepository;
+
     this.userState = {};
 
     this.initializeBotHandlers();
@@ -58,8 +62,18 @@ class UserHandler {
         await this.openTaskList(chatId, callbackQuery.message.message_id);
       } else if (data == 'archive') {
         await this.openArchiveList(chatId, callbackQuery.message.message_id);
-      } else if (data == 'back') {
+      } else if (data == 'back_task') {
         await this.openTasks(chatId, callbackQuery.message.message_id);
+      } else if (data == 'back_lesson') {
+        await this.openLibrary(chatId, callbackQuery.message.message_id);
+      } else if (data == 'default_lessons') {
+        await this.openLessonList(chatId, callbackQuery.message.message_id, 0);
+      } else if (data == 'extended_lessons') {
+        await this.openLessonList(chatId, callbackQuery.message.message_id, 1);
+      } else if (data.startsWith('lesson_')) {
+        await this.processLessonSelection(chatId, data, callbackQuery.message.message_id);
+      } else if (data == 'add_wallet') {
+        await this.addWallet(chatId, callbackQuery.id);
       }
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
@@ -81,7 +95,7 @@ class UserHandler {
         await this.userRepository.addUser(chatId, username, '', referralCode);
       }
 
-      const keyboard = chatId.toString() === this.adminId ? adminKeyboard(wallet) : authKeyboard(wallet);
+      const keyboard = chatId.toString() === this.adminId ? adminKeyboard : authKeyboard;
 
       this.bot.sendMessage(chatId, 'Добро пожаловать в бота!', keyboard);
     } catch (error) {
@@ -89,10 +103,13 @@ class UserHandler {
     }
   }
 
-  async addWallet(chatId) {
+  async addWallet(chatId, queryId) {
     this.clearUserState(chatId);
+
     this.bot.sendMessage(chatId, 'Введите свой кошелек!');
     this.userState[chatId] = 'addWallet';
+
+    this.bot.answerCallbackQuery(queryId);
   }
 
   async getUserWallet(chatId) {
@@ -105,7 +122,14 @@ class UserHandler {
         const totalPoints = user[0]?.task_points + user[0]?.lesson_points + user[0]?.ref_points;
         const wallet = user[0]?.wallet ? user[0]?.wallet : 'не установлен.';
 
-        this.bot.sendMessage(chatId, `Текущий кошелек:\n<code>${wallet}</code>\n\nВыполнение заданий: ${user[0].task_points}\nОткрытие уроков: ${user[0].lesson_points}\nПриглашение друзей: ${user[0].ref_points}\nВсего очков: ${totalPoints}`, { parse_mode: "HTML" });
+        this.bot.sendMessage(chatId, `Текущий кошелек:\n<code>${wallet}</code>\n\nВыполнение заданий: ${user[0].task_points}\nОткрытие уроков: ${user[0].lesson_points}\nПриглашение друзей: ${user[0].ref_points}\nВсего очков: ${totalPoints}`, {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{text: 'Установить новый кошелек', callback_data: 'add_wallet'}]
+            ]
+          }
+        });
       } else {
         this.bot.sendMessage(chatId, 'Ошибка получения кошелька.');
       }
@@ -134,8 +158,40 @@ class UserHandler {
     this.userState[chatId] = 'broadcast';
   }
 
-  async openLibrary(chatId) {
-    this.bot.sendMessage(chatId, 'Текст уроков!');
+  async openStatistics(chatId) {
+    try {
+      const topUsers = await this.userRepository.getTopUsers(chatId);
+
+      let message = '🏆 <b>Лучшие пользователи:</b>\n\n';
+  
+      topUsers.forEach(user => {
+        message += `${user.place}. ${user.name}: ${user.total_points}★\n`;
+      });
+  
+      const specificUser = topUsers.find(user => user.user_id == chatId);
+  
+      if (specificUser.place > 10) {
+        message += `\nВаше место: ${specificUser.place}\nОчки: ${specificUser.total_points}★`;
+      }
+  
+      await this.bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+    } catch (error) {
+      console.error('Ошибка при открытии статистики:', error);
+    }
+  }
+
+  async openLibrary(chatId, messageId = null) {
+    if (messageId) {
+      this.bot.editMessageText('Выберите: ', {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: lessonsKeyboard
+      });
+    } else {
+      this.bot.sendMessage(chatId, 'Выберите: ', {
+          reply_markup: lessonsKeyboard
+      });
+    }
   }
 
   async openTasks(chatId, messageId = null) {
@@ -152,6 +208,33 @@ class UserHandler {
     }
   }
 
+  async openLessonList(chatId, messageId, typeId) {
+    try {
+        const lessons = await this.lessonRepository.getUserLessons(typeId);
+
+        if (lessons.length === 0) {
+            this.bot.editMessageText('Список уроков пуст!', {
+                chat_id: chatId,
+                message_id: messageId,
+                reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_lesson` }]] }
+            });
+            return;
+        }
+
+        const lessonButtons = lessons.map(({ id, name }) => [{ text: name, callback_data: `lesson_${id}` }]);
+        this.bot.editMessageText('Список уроков:', {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+                inline_keyboard: lessonButtons,
+                resize_keyboard: true
+            }
+        });
+    } catch (error) {
+        ErrorHandler.handleError(error, chatId, this.bot);
+    }
+  }
+
   async processWallet(chatId, wallet) {
     if (!TonWeb.utils.Address.isValid(wallet)) {
       this.bot.sendMessage(chatId, 'Неверный формат кошелька, попробуйте еще раз!');
@@ -162,7 +245,7 @@ class UserHandler {
       await this.userRepository.updateUserWallet(chatId, wallet);
       this.clearUserState(chatId);
 
-      const keyboard = chatId.toString() === this.adminId ? adminKeyboard(wallet) : authKeyboard(wallet);
+      const keyboard = chatId.toString() === this.adminId ? adminKeyboard : authKeyboard;
       this.bot.sendMessage(chatId, 'Кошелек успешно установлен!', keyboard);
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
@@ -182,7 +265,7 @@ class UserHandler {
   async processTaskSelection(chatId, data, messageId) {
     const taskId = parseInt(data.split('_')[1], 10);
     try {
-      const task = await this.userRepository.getTaskById(taskId);
+      const task = await this.taskRepository.getTaskById(taskId);
 
       if (task.length === 0) {
         this.bot.sendMessage(chatId, 'Такого задания не существует!');
@@ -195,7 +278,32 @@ class UserHandler {
         reply_markup: {
           inline_keyboard: [
             [{ text: 'Выполнено!', callback_data: `done_${task[0].id}` }],
-            [{ text: 'Назад', callback_data: `back` }]
+            [{ text: 'Назад', callback_data: `back_task` }]
+          ],
+          resize_keyboard: true
+        }
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, chatId, this.bot);
+    }
+  }
+
+  async processLessonSelection(chatId, data, messageId) {
+    const lessonId = parseInt(data.split('_')[1], 10);
+    try {
+      const lesson = await this.lessonRepository.getLessonById(lessonId);
+
+      if (lesson.length === 0) {
+        this.bot.sendMessage(chatId, 'Такого урока не существует!');
+        return;
+      }
+
+      this.bot.editMessageText(lesson[0].text, {
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'Назад', callback_data: `back_lesson` }]
           ],
           resize_keyboard: true
         }
@@ -208,7 +316,7 @@ class UserHandler {
   async processArchiveSelection(chatId, data, messageId) {
     const taskId = parseInt(data.split('_')[1], 10);
     try {
-      const task = await this.userRepository.getTaskById(taskId);
+      const task = await this.taskRepository.getTaskById(taskId);
 
       if (task.length === 0) {
         this.bot.sendMessage(chatId, 'Такого задания не существует!');
@@ -220,7 +328,7 @@ class UserHandler {
         message_id: messageId,
         reply_markup: {
           inline_keyboard: [
-            [{ text: 'Назад', callback_data: `back` }]
+            [{ text: 'Назад', callback_data: `back_task` }]
           ],
           resize_keyboard: true
         }
@@ -234,7 +342,7 @@ class UserHandler {
     const taskId = parseInt(data.split('_')[1], 10);
     
     try {
-      const isAccept = await this.userRepository.acceptTask(chatId, taskId);
+      const isAccept = await this.taskRepository.acceptTask(chatId, taskId);
 
       if (!isAccept) {
         this.bot.editMessageText('Ошибка подтверждения, попробуйте позже.', {
@@ -261,19 +369,19 @@ class UserHandler {
     this.bot.editMessageText('Вы уверены?', {
       chat_id: chatId, 
       message_id: messageId,
-      reply_markup: { inline_keyboard: [[{ text: 'Да', callback_data: `confirm_${taskId}`}, { text: 'Нет', callback_data: 'back'}]] }
+      reply_markup: { inline_keyboard: [[{ text: 'Да', callback_data: `confirm_${taskId}`}, { text: 'Нет', callback_data: 'back_task'}]] }
     })
   }
 
   async openArchiveList(chatId, messageId) {
     try {
-      const tasks = await this.userRepository.getCompletedTasks(chatId);
+      const tasks = await this.taskRepository.getCompletedTasks(chatId);
 
       if (tasks.length === 0) {
         this.bot.editMessageText('Архив заданий пуст!', {
           chat_id: chatId,
           message_id: messageId,
-          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back` }]] }
+          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_task` }]] }
         });
         return;
       }
@@ -294,13 +402,13 @@ class UserHandler {
 
   async openTaskList(chatId, messageId) {
     try {
-      const tasks = await this.userRepository.getUserTasks(chatId);
+      const tasks = await this.taskRepository.getUserTasks(chatId);
 
       if (tasks.length === 0) {
         this.bot.editMessageText('Список заданий пуст!', {
           chat_id: chatId,
           message_id: messageId,
-          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back` }]] }
+          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_task` }]] }
         });
         return;
       }

@@ -130,18 +130,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
+---------------------------------------------------
 
 CREATE TABLE Lessons (
-    id NUMERIC PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     name VARCHAR(100) UNIQUE NOT NULL,
-    text TEXT NOT NULL
+    text TEXT NOT NULL,
+    type_id INTEGER NOT NULL DEFAULT 0,
+    photo_path VARCHAR(255),
+    is_deleted BOOLEAN DEFAULT FALSE
 );
 
 --Добавление урока
 CREATE OR REPLACE FUNCTION add_lesson(
     p_name VARCHAR,
-    p_text TEXT
+    p_text TEXT,
+    p_type_id INTEGER,
+    p_points INTEGER,
+    p_path VARCHAR(255)
 ) RETURNS NUMERIC AS $$
 DECLARE
     v_id NUMERIC;
@@ -153,13 +159,21 @@ BEGIN
     IF p_text IS NULL OR LENGTH(TRIM(p_text)) = 0 THEN
         RAISE EXCEPTION 'Lesson text cannot be null or empty';
     END IF;
+    
+    IF p_type_id IS NULL THEN
+        RAISE EXCEPTION 'Lesson type cannot be null or empty';
+    END IF;
+
+    IF p_points IS NULL THEN
+        RAISE EXCEPTION 'Lesson points cannot be null or empty';
+    END IF;
 
     IF EXISTS (SELECT 1 FROM Lessons WHERE name = p_name) THEN
         RAISE EXCEPTION 'Lesson with name % already exists', p_name;
     END IF;
 
-    INSERT INTO Lessons (name, text) 
-    VALUES (p_name, p_text)
+    INSERT INTO Lessons (name, text, type_id, points, photo_path) 
+    VALUES (p_name, p_text, p_type_id, p_points, p_path)
     RETURNING id INTO v_id;
     
     RETURN v_id;
@@ -168,7 +182,8 @@ $$ LANGUAGE plpgsql;
 
 --Удаление урока
 CREATE OR REPLACE FUNCTION delete_lesson(
-    p_id NUMERIC
+    p_id NUMERIC,
+    is_deleted BOOLEAN
 ) RETURNS BOOLEAN AS $$
 BEGIN
     IF p_id IS NULL THEN
@@ -179,7 +194,7 @@ BEGIN
         RAISE EXCEPTION 'Lesson with id % does not exist', p_id;
     END IF;
 
-    DELETE FROM Lessons WHERE id = p_id;
+    UPDATE Lessons SET is_deleted = delete_lesson.is_deleted WHERE id = p_id;
     
     IF FOUND THEN
         RETURN TRUE;
@@ -227,7 +242,7 @@ $$ LANGUAGE plpgsql;
 --Получение одного урока
 CREATE OR REPLACE FUNCTION get_lesson(
     p_id NUMERIC
-) RETURNS SETOF Lesson AS $$
+) RETURNS SETOF Lessons AS $$
 BEGIN
     IF p_id IS NULL THEN
         RAISE EXCEPTION 'Lesson id cannot be null';
@@ -252,6 +267,80 @@ BEGIN
     SELECT * FROM Lessons;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_user_lessons(
+    p_type_id INTEGER
+)
+ RETURNS SETOF Lessons AS $$
+BEGIN
+    RETURN QUERY
+    SELECT * FROM Lessons WHERE is_deleted = FALSE AND type_id = p_type_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_top_users(
+    input_user_id NUMERIC
+)
+RETURNS TABLE (
+    place INTEGER,
+    user_id NUMERIC,
+    name VARCHAR(255),
+    total_points INTEGER
+) AS $$
+DECLARE
+    total_users INTEGER;
+BEGIN
+    SELECT COUNT(DISTINCT id) INTO total_users FROM Users;
+
+    RETURN QUERY
+    WITH UserPoints AS (
+        SELECT 
+            Users.id,
+            Users.name,
+            (ref_points + lesson_points + task_points)::INTEGER AS total_points
+        FROM Users
+    ),
+    TopUsers AS (
+        SELECT 
+            UserPoints.id,
+            UserPoints.name,
+            UserPoints.total_points,
+            ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place
+        FROM UserPoints
+        ORDER BY UserPoints.total_points DESC
+        LIMIT LEAST(10, total_users)
+    ),
+    SpecificUser AS (
+        SELECT 
+            UserPoints.id,
+            UserPoints.name,
+            UserPoints.total_points,
+            ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place
+        FROM UserPoints
+        WHERE id = input_user_id
+    )
+    SELECT DISTINCT ON (COALESCE(TopUsers.place, SpecificUser.place))
+        COALESCE(TopUsers.place, SpecificUser.place)::INTEGER AS place,
+        COALESCE(TopUsers.id, SpecificUser.id) AS user_id,
+        COALESCE(TopUsers.name, SpecificUser.name) AS name,
+        COALESCE(TopUsers.total_points, SpecificUser.total_points) AS total_points
+    FROM TopUsers
+    FULL JOIN SpecificUser ON TopUsers.place = SpecificUser.place;
+END;
+$$ LANGUAGE plpgsql;
+
+select * from get_top_users(6451534002);
+select * from get_top_users(468407757);
+
+--6451534002
+
+GRANT SELECT, UPDATE, INSERT ON TABLE Lessons TO crypto_admin;
+GRANT SELECT ON TABLE Lessons TO crypto_user;
+
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE lessons_id_seq TO crypto_admin;
+GRANT USAGE, SELECT ON SEQUENCE lessons_id_seq TO crypto_user;
+
+------------------------------------------------------
 
 CREATE TABLE ADMINS (
     id SERIAL PRIMARY KEY,

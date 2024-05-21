@@ -1,38 +1,43 @@
 require('dotenv').config();
-const bot = require('./utils/bot');
-const UserHandler = require('./handlers/user.handler');
-const UserRepository = require('./repositories/user.repository');
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const fileUpload = require('express-fileupload');
+
+const bot = require('./utils/bot');
+const UserHandler = require('./handlers/user.handler');
 const userRouter = require('./routers/user.router');
+const taskRouter = require('./routers/task.router');
+const lessonRouter = require('./routers/lesson.router');
 const { commands } = require('./utils/keyboards'); 
+
+const { userRepository, taskRepository, lessonRepository } = require('./repositories/index');
+
 const app = express();
 
 const port = process.env.PORT || 3000;
 const adminId = process.env.ADMIN_ID;
-const dbHost = process.env.DB_HOST;
-const dbUser = process.env.DB_USER;
-const dbUserPassword = process.env.DB_USER_PASSWORD;
-const dbName = process.env.DB_NAME;
 
+app.use(fileUpload());
 app.use(express.json());
 app.use(cors());
 
-const userRepository = new UserRepository(dbUser, dbHost, dbName, dbUserPassword);
-const userHandler = new UserHandler(bot, userRepository, adminId);
+app.use(express.static(path.join(__dirname, 'build')));
+app.use('/upload', express.static(path.join(__dirname, 'upload')));
 
-bot.onText(/\/start/, msg => userHandler.startMessage(msg))
-bot.onText(new RegExp(`(${commands.add_wallet}|${commands.change_wallet})`), msg => userHandler.addWallet(msg.chat.id));
+const userHandler = new UserHandler(bot, userRepository, taskRepository, lessonRepository, adminId);
+
+bot.onText(/\/start/, msg => userHandler.startMessage(msg));
 bot.onText(new RegExp(commands.wallet), msg => userHandler.getUserWallet(msg.chat.id));
 bot.onText(new RegExp(commands.add_ref), msg => userHandler.getReferralLink(msg.chat.id));
 bot.onText(new RegExp(commands.broadcast), msg => userHandler.sendBroadcastMessagePrompt(msg.chat.id));  
 bot.onText(new RegExp(commands.library), msg => userHandler.openLibrary(msg.chat.id));
 bot.onText(new RegExp(commands.tasks), msg => userHandler.openTasks(msg.chat.id));
+bot.onText(new RegExp(commands.statistics), msg => userHandler.openStatistics(msg.chat.id));
 
 app.use('/api', userRouter);
-
-app.use(express.static(path.join(__dirname, 'build')));
+app.use('/api', taskRouter);
+app.use('/api', lessonRouter);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
