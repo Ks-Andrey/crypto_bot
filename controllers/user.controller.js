@@ -150,7 +150,7 @@ class UserController {
             
             if (users.length > 0) {
                 users.forEach(({id}) => {
-                    this.bot.sendMessage(id, text);
+                    this.bot.sendMessage(id, text, { parse_mode: 'HTML' });
                 });
 
                 res.json({ status: true });

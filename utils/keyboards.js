@@ -1,5 +1,5 @@
 const commands = {
-    statistics: 'Статистика',
+    statistics: 'Рейтинг',
     wallet: 'Профиль', 
     add_ref: 'Пригласить друзей',
     broadcast: 'Сделать рассылку',

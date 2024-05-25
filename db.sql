@@ -83,6 +83,10 @@ BEGIN
         RAISE EXCEPTION 'This user does not exist';
     END IF;
 
+    IF EXISTS (SELECT 1 FROM USERS WHERE wallet = new_wallet) THEN
+        RAISE EXCEPTION 'Wallet already in use' USING ERRCODE = 'P0001';
+    END IF;
+
     UPDATE Users SET wallet = new_wallet WHERE id = input_user_id;
     IF FOUND THEN
         RETURN TRUE;
@@ -684,11 +688,9 @@ CREATE INDEX idx_users_id ON Users(id);
 
 
 
-
-------------------
 CREATE TABLE USER_LISTS (
     ID SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL
+    name VARCHAR(100) UNIQUE NOT NULL
 );
 
 CREATE TABLE USER_LIST_DATA (
@@ -707,6 +709,11 @@ BEGIN
     IF p_name IS NULL OR LENGTH(TRIM(p_name)) = 0 THEN
         RAISE EXCEPTION 'List name cannot be empty';
     END IF;
+
+    IF EXISTS (SELECT 1 FROM USER_LISTS WHERE name = p_name) THEN
+        RAISE EXCEPTION 'Task with name % already exists', p_name;
+    END IF;
+
     INSERT INTO USER_LISTS (name) VALUES (p_name) RETURNING ID INTO new_list_id;
     RETURN new_list_id;
 END;
@@ -828,7 +835,6 @@ GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_lists_id_seq TO crypto_admin;
 
 ALTER TABLE Lessons DROP CONSTRAINT unique_name;
 
-
 CREATE OR REPLACE FUNCTION edit_task(
     p_id NUMERIC,
     p_name VARCHAR,
@@ -862,3 +868,7 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+
+ALTER TABLE USER_LISTS
+ADD CONSTRAINT unique_list_name UNIQUE (name);
