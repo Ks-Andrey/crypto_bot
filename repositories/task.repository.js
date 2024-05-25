@@ -84,6 +84,15 @@ class TaskRepository {
             throw error;
         }
     }
+
+    async editTask(taskId, name, text) {
+        try {
+            const result = await this.client.query('SELECT edit_task($1, $2, $3)', [taskId, name, text]);
+            return result.rows[0].edit_task;
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
 module.exports = TaskRepository;

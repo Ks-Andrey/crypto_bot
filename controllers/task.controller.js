@@ -67,6 +67,18 @@ class TaskController {
             res.status(500).json({ error: error.message });
         }
     }
+
+    async editTask(req, res) {
+        const id = req.params.id;
+        const { name, text } = req.body;
+
+        try {
+            const isEdited = await this.adminRepository.editTask(id, name, text);
+            res.json({ status: isEdited });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
 }
 
 module.exports = TaskController;

@@ -50,15 +50,32 @@ class LessonController {
     }
 
     async uploadPhoto(req, res) {
-        const { image } = req.files;
-
-        if (!image) return res.sendStatus(400);
-
+        const { image } = req.files || {};
+    
+        if (!image) {
+            return res.json({ image: '' });
+        }
+    
         const path = '/../upload/' + image.name;
+    
+        try {
+            await image.mv(__dirname + path);
+            res.json({ image: path });
+        } catch (error) {
+            res.sendStatus(500);
+        }
+    }
+    
+    async editLesson(req, res) {
+        const id = req.params.id;
+        const { name, text, photo_path } = req.body;
 
-        image.mv(__dirname + path);
-        
-        res.json({ image: path });
+        try {
+            const isEdited = await this.adminRepository.editLesson(id, name, text, photo_path);
+            res.json({ status: isEdited });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 class UserController {
-    constructor(adminRepository){
+    constructor(adminRepository, bot){
         this.adminRepository = adminRepository;
+        this.bot = bot;
     }
 
     async getUsers(req, res) {
@@ -58,6 +59,104 @@ class UserController {
             const isAdmin = await this.adminRepository.authAdmin(login, password);
 
             isAdmin && res.json({ isAdmin });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getLists(req, res) {
+        try {
+            const lists = await this.adminRepository.getLists(null);
+            res.json(lists);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getListsByUser(req, res) {
+        const userId = req.params.id;
+
+        try {
+            const lists = await this.adminRepository.getLists(userId);
+            res.json(lists);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async addList(req, res) {
+        const { name } = req.body;
+
+        try {
+            const id = await this.adminRepository.addList(name);
+            res.json({ listId: id });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+    
+    async addUserToList(req, res) {
+        const { userId } = req.body;
+        const listId = req.params.id;
+
+        try {
+            const isAdd = await this.adminRepository.addUserToList(listId, userId);
+            res.json({ status: isAdd })
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async deleteUserFromList(req, res) {
+        const { userId } = req.body;
+        const listId = req.params.id;
+
+        try {
+            const isDeleted = await this.adminRepository.deleteUserFromList(listId, userId);
+            res.json({ status: isDeleted });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getUsersFromList(req, res) {
+        const listId = req.params.id;
+
+        try {
+            const users = await this.adminRepository.getUsersFromList(listId);
+            res.json(users);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async deleteList(req, res) {
+        const { listId } = req.body;
+
+        try {
+            const isDeleted = await this.adminRepository.deleteList(listId);
+            res.json({ status: isDeleted });
+        } catch (error) {
+            res.status(500).json({ error: error.message })
+        }
+    }
+
+    async broadcastMessage(req, res) {
+        const listId = req.params.id;
+        const { text } = req.body;
+
+        try {
+            const users = await this.adminRepository.getUsersFromList(listId);
+            
+            if (users.length > 0) {
+                users.forEach(({id}) => {
+                    this.bot.sendMessage(id, text);
+                });
+
+                res.json({ status: true });
+            }else{
+                res.status(403).json({ error: 'There are no users in list' });
+            }
         } catch (error) {
             res.status(500).json({ error: error.message });
         }

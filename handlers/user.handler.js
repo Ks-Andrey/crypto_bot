@@ -180,13 +180,27 @@ class UserHandler {
     }
   }
 
+  // async openLibrary(chatId, messageId = null) {
+  //   if (messageId) {
+  //     this.bot.editMessageText('Выберите: ', {
+  //         chat_id: chatId,
+  //         message_id: messageId,
+  //         reply_markup: lessonsKeyboard
+  //     });
+  //   } else {
+  //     this.bot.sendMessage(chatId, 'Выберите: ', {
+  //         reply_markup: lessonsKeyboard
+  //     });
+  //   }
+  // }
+
   async openLibrary(chatId, messageId = null) {
     if (messageId) {
-      this.bot.editMessageText('Выберите: ', {
-          chat_id: chatId,
-          message_id: messageId,
+      this.bot.sendMessage(chatId, 'Выберите: ', {
           reply_markup: lessonsKeyboard
       });
+
+      this.bot.deleteMessage(chatId, messageId);
     } else {
       this.bot.sendMessage(chatId, 'Выберите: ', {
           reply_markup: lessonsKeyboard
@@ -288,30 +302,74 @@ class UserHandler {
     }
   }
 
+  // async processLessonSelection(chatId, data, messageId) {
+  //   const lessonId = parseInt(data.split('_')[1], 10);
+  //   try {
+  //     const lesson = await this.lessonRepository.getLessonById(lessonId);
+
+  //     if (lesson.length === 0) {
+  //       this.bot.sendMessage(chatId, 'Такого урока не существует!');
+  //       return;
+  //     }
+
+  //     await this.lessonRepository.acceptLesson(chatId, lessonId);
+
+  //     this.bot.editMessageText(lesson[0].text, {
+  //       chat_id: chatId,
+  //       message_id: messageId,
+  //       reply_markup: {
+  //         inline_keyboard: [
+  //           [{ text: 'Назад', callback_data: `back_lesson` }]
+  //         ],
+  //         resize_keyboard: true
+  //       }
+  //     });
+  //   } catch (error) {
+  //     ErrorHandler.handleError(error, chatId, this.bot);
+  //   }
+  // }
+
   async processLessonSelection(chatId, data, messageId) {
     const lessonId = parseInt(data.split('_')[1], 10);
     try {
       const lesson = await this.lessonRepository.getLessonById(lessonId);
-
+  
       if (lesson.length === 0) {
         this.bot.sendMessage(chatId, 'Такого урока не существует!');
         return;
       }
-
-      this.bot.editMessageText(lesson[0].text, {
-        chat_id: chatId,
-        message_id: messageId,
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: 'Назад', callback_data: `back_lesson` }]
-          ],
-          resize_keyboard: true
-        }
-      });
+  
+      await this.lessonRepository.acceptLesson(chatId, lessonId);
+  
+      if (lesson[0]?.photo_path) {
+        await this.bot.sendPhoto(chatId, __dirname + lesson[0].photo_path, {
+          caption: lesson[0].text,
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Назад', callback_data: `back_lesson` }]
+            ],
+            resize_keyboard: true
+          }
+        });
+      } else {
+        await this.bot.sendMessage(chatId, lesson[0].text, {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: 'Назад', callback_data: `back_lesson` }]
+            ],
+            resize_keyboard: true
+          }
+        });
+      }
+  
+      await this.bot.deleteMessage(chatId, messageId);
+  
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
-  }
+  }  
 
   async processArchiveSelection(chatId, data, messageId) {
     const taskId = parseInt(data.split('_')[1], 10);

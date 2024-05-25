@@ -57,6 +57,24 @@ class LessonRepository {
             throw error;
         }
     }
+
+    async acceptLesson(userId, lessonId){
+        try {
+            const result = await this.client.query('SELECT accept_lesson($1, $2)', [userId, lessonId]);
+            return result.rows[0].accept_lesson;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async editLesson(lessonId, name, text, path) {
+        try {
+            const result = await this.client.query('SELECT edit_lesson($1, $2, $3, $4)', [lessonId, name, text, path]);
+            return result.rows[0].edit_lesson;
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
 module.exports = LessonRepository;

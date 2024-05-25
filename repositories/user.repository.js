@@ -102,6 +102,60 @@ class UserRepository {
             throw error;
         }
     }
+
+    async getLists(userId) {
+        try {
+            const result = await this.client.query('SELECT * FROM get_all_lists($1)', [userId]);
+            return result.rows;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async addList(name) {
+        try {
+            const result = await this.client.query('SELECT add_list($1)', [name]);
+            return result.rows[0].add_list;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async addUserToList(listId, userId) {
+        try {
+            const result = await this.client.query('SELECT add_user_to_list($1, $2)', [listId, userId]);
+            return result.rows[0].add_user_to_list;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async deleteUserFromList(listId, userId) {
+        try {
+            const result = await this.client.query('SELECT delete_user_from_list($1, $2)', [listId, userId]);
+            return result.rows[0].delete_user_from_list;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async getUsersFromList(listId) {
+        try {
+            const result = await this.client.query('SELECT * FROM get_users_from_list($1)', [listId]);
+            return result.rows;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async deleteList(listId) {
+        try {
+            const result = await this.client.query('SELECT * FROM delete_list($1)', [listId]);
+            return result.rows;
+        } catch (error) {
+            throw error;
+        }
+    }
 }
 
 module.exports = UserRepository;

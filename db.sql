@@ -14,13 +14,10 @@ CREATE TABLE Users (
 );
 
 drop view USERS_LIST;
--- CREATE VIEW USERS_LIST AS
--- SELECT * FROM USERS WHERE wallet <> NULL OR wallet <> '';
 
 ALTER TABLE Users
 ADD CONSTRAINT unique_wallet UNIQUE (wallet);
 
---изменена
 drop function get_all_users;
 CREATE OR REPLACE FUNCTION get_all_users()
 RETURNS SETOF USERS AS $$
@@ -37,7 +34,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 drop function get_users_by_wallet;
 CREATE OR REPLACE FUNCTION get_users_by_wallet(input_wallet VARCHAR)
 RETURNS SETOF USERS AS $$
@@ -46,7 +42,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 drop function search_users;
 CREATE OR REPLACE FUNCTION search_users(search_text TEXT)
 RETURNS TABLE (
@@ -72,7 +67,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 drop function get_user_referrals;
 CREATE OR REPLACE FUNCTION get_user_referrals(input_user_id NUMERIC)
 RETURNS SETOF USERS AS $$
@@ -130,18 +124,61 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
----------------------------------------------------
 
 CREATE TABLE Lessons (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
     text TEXT NOT NULL,
     type_id INTEGER NOT NULL DEFAULT 0,
     photo_path VARCHAR(255),
-    is_deleted BOOLEAN DEFAULT FALSE
+    is_deleted BOOLEAN DEFAULT FALSE,
+    points INTEGER
 );
 
---Добавление урока
+CREATE TABLE CONFIRM_LESSONS (
+    id SERIAL PRIMARY KEY,
+    lesson_id INTEGER FOREIGN KEY REFERENCES Lessons(id),
+    user_id NUMERIC FOREIGN KEY REFERENCES Users(id)
+);
+
+CREATE OR REPLACE FUNCTION accept_lesson(
+    p_user_id NUMERIC,
+    p_lesson_id INTEGER
+) RETURNS BOOLEAN AS $$
+DECLARE
+    i_points INTEGER;
+BEGIN
+    IF p_user_id IS NULL THEN
+        RAISE EXCEPTION 'User id cannot be null';
+    END IF;
+    
+    IF p_lesson_id IS NULL THEN
+        RAISE EXCEPTION 'Lesson id cannot be null';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = p_user_id) THEN
+        RAISE EXCEPTION 'User not found';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Lessons WHERE Lessons.id = p_lesson_id) THEN
+        RAISE EXCEPTION 'Lesson not found';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM CONFIRM_LESSONS WHERE lesson_id = p_lesson_id AND user_id = p_user_id) THEN
+        RETURN FALSE;
+    END IF;
+
+    SELECT Lessons.points INTO i_points FROM Lessons WHERE Lessons.id = p_lesson_id;
+
+    INSERT INTO CONFIRM_LESSONS (lesson_id, user_id) 
+    VALUES (p_lesson_id, p_user_id);
+
+    UPDATE Users SET lesson_points = lesson_points + i_points WHERE Users.id = p_user_id;
+    
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION add_lesson(
     p_name VARCHAR,
     p_text TEXT,
@@ -168,7 +205,7 @@ BEGIN
         RAISE EXCEPTION 'Lesson points cannot be null or empty';
     END IF;
 
-    IF EXISTS (SELECT 1 FROM Lessons WHERE name = p_name) THEN
+    IF EXISTS (SELECT 1 FROM Lessons WHERE name = p_name AND type_id = p_type_id) THEN
         RAISE EXCEPTION 'Lesson with name % already exists', p_name;
     END IF;
 
@@ -180,7 +217,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---Удаление урока
 CREATE OR REPLACE FUNCTION delete_lesson(
     p_id NUMERIC,
     is_deleted BOOLEAN
@@ -204,11 +240,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---Редактирование урока
 CREATE OR REPLACE FUNCTION edit_lesson(
     p_id NUMERIC,
     p_name VARCHAR,
-    p_text TEXT
+    p_text TEXT,
+    p_photo_path VARCHAR(255)
 ) RETURNS BOOLEAN AS $$
 BEGIN
     IF p_id IS NULL THEN
@@ -228,7 +264,7 @@ BEGIN
     END IF;
 
     UPDATE Lessons 
-    SET name = p_name, text = p_text 
+    SET name = p_name, text = p_text, photo_path = p_photo_path
     WHERE id = p_id;
     
     IF FOUND THEN
@@ -239,7 +275,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---Получение одного урока
 CREATE OR REPLACE FUNCTION get_lesson(
     p_id NUMERIC
 ) RETURNS SETOF Lessons AS $$
@@ -259,7 +294,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---Получение всех уроков
 CREATE OR REPLACE FUNCTION get_all_lessons()
  RETURNS SETOF Lessons AS $$
 BEGIN
@@ -331,16 +365,6 @@ $$ LANGUAGE plpgsql;
 
 select * from get_top_users(6451534002);
 select * from get_top_users(468407757);
-
---6451534002
-
-GRANT SELECT, UPDATE, INSERT ON TABLE Lessons TO crypto_admin;
-GRANT SELECT ON TABLE Lessons TO crypto_user;
-
-GRANT USAGE, SELECT, UPDATE ON SEQUENCE lessons_id_seq TO crypto_admin;
-GRANT USAGE, SELECT ON SEQUENCE lessons_id_seq TO crypto_user;
-
-------------------------------------------------------
 
 CREATE TABLE ADMINS (
     id SERIAL PRIMARY KEY,
@@ -549,6 +573,33 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION get_task_users(p_task_id INTEGER)
+RETURNS TABLE(
+    ID NUMERIC,
+    NAME VARCHAR(255)
+)
+AS $$
+BEGIN
+    IF p_task_id IS NULL THEN
+        RAISE EXCEPTION 'Task id cannot be null';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM TASKS WHERE TASKS.id = p_task_id) THEN
+        RAISE EXCEPTION 'Task with id % does not exist', p_task_id;
+    END IF;
+
+    RETURN QUERY
+    SELECT 
+        Users.id,
+        Users.name
+    FROM 
+        Users
+    INNER JOIN 
+        CONFIRM_TASKS ON CONFIRM_TASKS.USER_ID = Users.id
+    WHERE 
+        CONFIRM_TASKS.TASK_ID = p_task_id;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION add_points_to_referrer()
 RETURNS TRIGGER AS $$
@@ -598,6 +649,16 @@ GRANT EXECUTE ON FUNCTION update_user_wallet(NUMERIC, VARCHAR) TO crypto_admin;
 GRANT EXECUTE ON FUNCTION add_user(NUMERIC, VARCHAR, VARCHAR, NUMERIC) TO crypto_admin;
 GRANT EXECUTE ON FUNCTION search_users(TEXT) TO crypto_admin;
 
+GRANT SELECT, UPDATE, INSERT ON TABLE Lessons TO crypto_admin;
+GRANT SELECT ON TABLE Lessons TO crypto_user;
+GRANT SELECT, INSERT ON TABLE CONFIRM_LESSONS TO crypto_user;
+GRANT SELECT, INSERT ON TABLE CONFIRM_LESSONS TO crypto_admin;
+
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE lessons_id_seq TO crypto_admin;
+GRANT USAGE, SELECT ON SEQUENCE lessons_id_seq TO crypto_user;
+GRANT USAGE, SELECT ON SEQUENCE confirm_lessons_id_seq TO crypto_user;
+GRANT USAGE, SELECT ON SEQUENCE confirm_lessons_id_seq TO crypto_admin;
+
 
 GRANT SELECT, UPDATE, INSERT ON TABLE Users TO crypto_user;
 GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE Users TO crypto_admin;
@@ -606,34 +667,6 @@ GRANT SELECT ON USERS_LIST TO crypto_admin;
 GRANT SELECT ON USERS_LIST TO crypto_user;
 
 GRANT SELECT ON TABLE ADMINS TO crypto_admin;
-
-CREATE OR REPLACE FUNCTION get_task_users(p_task_id INTEGER)
-RETURNS TABLE(
-    ID NUMERIC,
-    NAME VARCHAR(255)
-)
-AS $$
-BEGIN
-    IF p_task_id IS NULL THEN
-        RAISE EXCEPTION 'Task id cannot be null';
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM TASKS WHERE TASKS.id = p_task_id) THEN
-        RAISE EXCEPTION 'Task with id % does not exist', p_task_id;
-    END IF;
-
-    RETURN QUERY
-    SELECT 
-        Users.id,
-        Users.name
-    FROM 
-        Users
-    INNER JOIN 
-        CONFIRM_TASKS ON CONFIRM_TASKS.USER_ID = Users.id
-    WHERE 
-        CONFIRM_TASKS.TASK_ID = p_task_id;
-END;
-$$ LANGUAGE plpgsql;
 
 --индексы
 CREATE INDEX idx_users_wallet ON Users(wallet);
@@ -648,3 +681,184 @@ CREATE INDEX idx_confirm_tasks_user_id ON CONFIRM_TASKS(user_id);
 
 CREATE INDEX idx_users_name ON Users(name);
 CREATE INDEX idx_users_id ON Users(id);
+
+
+
+
+------------------
+CREATE TABLE USER_LISTS (
+    ID SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE USER_LIST_DATA (
+    ID SERIAL PRIMARY KEY,
+    list_id INTEGER NOT NULL,
+    user_id NUMERIC NOT NULL,
+    FOREIGN KEY (list_id) REFERENCES USER_LISTS(ID)
+);
+
+DROP FUNCTION add_list;
+CREATE OR REPLACE FUNCTION add_list(p_name VARCHAR)
+RETURNS INTEGER AS $$
+DECLARE
+    new_list_id INTEGER;
+BEGIN
+    IF p_name IS NULL OR LENGTH(TRIM(p_name)) = 0 THEN
+        RAISE EXCEPTION 'List name cannot be empty';
+    END IF;
+    INSERT INTO USER_LISTS (name) VALUES (p_name) RETURNING ID INTO new_list_id;
+    RETURN new_list_id;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION add_user_to_list;
+CREATE OR REPLACE FUNCTION add_user_to_list(p_list_id INTEGER, p_user_id NUMERIC)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_list_id IS NULL OR p_user_id IS NULL THEN
+        RAISE EXCEPTION 'List ID and User ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
+        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
+    END IF;
+
+    INSERT INTO USER_LIST_DATA (list_id, user_id) VALUES (p_list_id, p_user_id);
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION delete_user_from_list;
+CREATE OR REPLACE FUNCTION delete_user_from_list(p_list_id INTEGER, p_user_id NUMERIC)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_list_id IS NULL OR p_user_id IS NULL THEN
+        RAISE EXCEPTION 'List ID and User ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LIST_DATA WHERE list_id = p_list_id AND user_id = p_user_id) THEN
+        RAISE EXCEPTION 'User ID % not found in List ID %', p_user_id, p_list_id;
+    END IF;
+
+    DELETE FROM USER_LIST_DATA WHERE list_id = p_list_id AND user_id = p_user_id;
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION get_users_from_list;
+CREATE OR REPLACE FUNCTION get_users_from_list(p_list_id INTEGER)
+RETURNS TABLE (
+    id NUMERIC,
+    name VARCHAR(100)
+) AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT USERS.id AS id, USERS.name AS name
+    FROM USER_LIST_DATA INNER JOIN
+    USERS ON USER_LIST_DATA.user_id = USERS.id
+    WHERE list_id = p_list_id;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION delete_list;
+CREATE OR REPLACE FUNCTION delete_list(p_list_id INTEGER)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_list_id IS NULL THEN
+        RAISE EXCEPTION 'List ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
+        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
+    END IF;
+
+    DELETE FROM USER_LIST_DATA WHERE list_id = p_list_id;
+    DELETE FROM USER_LISTS WHERE ID = p_list_id;
+
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION get_all_lists;
+CREATE OR REPLACE FUNCTION get_all_lists(p_user_id NUMERIC DEFAULT NULL)
+RETURNS SETOF USER_LISTS AS $$
+BEGIN
+    IF p_user_id IS NULL THEN
+        RETURN QUERY
+        SELECT *
+        FROM USER_LISTS;
+    ELSE
+        RETURN QUERY
+        SELECT *
+        FROM USER_LISTS
+        WHERE ID NOT IN (
+            SELECT list_id
+            FROM USER_LIST_DATA
+            WHERE user_id = p_user_id
+        );
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+ALTER TABLE CONFIRM_LESSONS
+ADD CONSTRAINT fk_lesson_id
+FOREIGN KEY (lesson_id) REFERENCES Lessons(id)
+ON DELETE CASCADE;
+
+ALTER TABLE CONFIRM_LESSONS
+ADD CONSTRAINT fk_user_id
+FOREIGN KEY (user_id) REFERENCES Users(id)
+ON DELETE CASCADE;
+
+GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE USER_LISTS TO crypto_admin;
+GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE USER_LIST_DATA TO crypto_admin;
+
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_list_data_id_seq TO crypto_admin;
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_lists_id_seq TO crypto_admin;
+
+ALTER TABLE Lessons DROP CONSTRAINT unique_name;
+
+
+CREATE OR REPLACE FUNCTION edit_task(
+    p_id NUMERIC,
+    p_name VARCHAR,
+    p_text TEXT
+) RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_id IS NULL THEN
+        RAISE EXCEPTION 'Task id cannot be null';
+    END IF;
+
+    IF p_name IS NULL OR LENGTH(TRIM(p_name)) = 0 THEN
+        RAISE EXCEPTION 'Task name cannot be null or empty';
+    END IF;
+    
+    IF p_text IS NULL OR LENGTH(TRIM(p_text)) = 0 THEN
+        RAISE EXCEPTION 'Task text cannot be null or empty';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Tasks WHERE id = p_id) THEN
+        RAISE EXCEPTION 'Lesson with id % does not exist', p_id;
+    END IF;
+
+    UPDATE Tasks 
+    SET name = p_name, text = p_text 
+    WHERE id = p_id;
+    
+    IF FOUND THEN
+        RETURN TRUE;
+    ELSE
+        RETURN FALSE;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
