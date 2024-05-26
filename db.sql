@@ -83,7 +83,7 @@ BEGIN
         RAISE EXCEPTION 'This user does not exist';
     END IF;
 
-    IF EXISTS (SELECT 1 FROM USERS WHERE wallet = new_wallet) THEN
+    IF EXISTS (SELECT 1 FROM USERS WHERE wallet = new_wallet AND id <> input_user_id) THEN
         RAISE EXCEPTION 'Wallet already in use' USING ERRCODE = 'P0001';
     END IF;
 
@@ -244,13 +244,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
+DROP FUNCTION edit_lesson;
 CREATE OR REPLACE FUNCTION edit_lesson(
     p_id NUMERIC,
     p_name VARCHAR,
     p_text TEXT,
-    p_photo_path VARCHAR(255)
+    p_photo_path VARCHAR(255),
+    p_points INTEGER
 ) RETURNS BOOLEAN AS $$
 BEGIN
+    IF p_points IS NULL THEN 
+        RAISE EXCEPTION 'Lesson points cannot be null';
+    END IF;
+
     IF p_id IS NULL THEN
         RAISE EXCEPTION 'Lesson id cannot be null';
     END IF;
@@ -268,7 +275,7 @@ BEGIN
     END IF;
 
     UPDATE Lessons 
-    SET name = p_name, text = p_text, photo_path = p_photo_path
+    SET name = p_name, text = p_text, photo_path = p_photo_path, points = p_points
     WHERE id = p_id;
     
     IF FOUND THEN
@@ -605,13 +612,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 CREATE OR REPLACE FUNCTION add_points_to_referrer()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.wallet IS NOT NULL AND NEW.wallet <> '' AND (OLD.wallet IS NULL OR OLD.wallet = '') THEN
         IF NEW.ref_id IS NOT NULL AND NEW.ref_id <> 0 THEN
             UPDATE Users
-            SET ref_points = ref_points + 10
+            SET ref_points = ref_points + 500
             WHERE id = NEW.ref_id;
         END IF;
     END IF;
@@ -625,11 +633,7 @@ ON Users
 FOR EACH ROW
 EXECUTE FUNCTION add_points_to_referrer();
 
-
-GRANT SELECT, INSERT, UPDATE ON TABLE TASKS TO crypto_admin;
 GRANT SELECT ON TABLE TASKS TO crypto_user;
-
-GRANT SELECT, INSERT, UPDATE ON TABLE CONFIRM_TASKS TO crypto_admin;
 GRANT SELECT, INSERT ON TABLE CONFIRM_TASKS to crypto_user;
 
 GRANT USAGE, SELECT ON SEQUENCE confirm_tasks_id_seq TO crypto_user;
@@ -653,10 +657,8 @@ GRANT EXECUTE ON FUNCTION update_user_wallet(NUMERIC, VARCHAR) TO crypto_admin;
 GRANT EXECUTE ON FUNCTION add_user(NUMERIC, VARCHAR, VARCHAR, NUMERIC) TO crypto_admin;
 GRANT EXECUTE ON FUNCTION search_users(TEXT) TO crypto_admin;
 
-GRANT SELECT, UPDATE, INSERT ON TABLE Lessons TO crypto_admin;
 GRANT SELECT ON TABLE Lessons TO crypto_user;
 GRANT SELECT, INSERT ON TABLE CONFIRM_LESSONS TO crypto_user;
-GRANT SELECT, INSERT ON TABLE CONFIRM_LESSONS TO crypto_admin;
 
 GRANT USAGE, SELECT, UPDATE ON SEQUENCE lessons_id_seq TO crypto_admin;
 GRANT USAGE, SELECT ON SEQUENCE lessons_id_seq TO crypto_user;
@@ -835,12 +837,19 @@ GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_lists_id_seq TO crypto_admin;
 
 ALTER TABLE Lessons DROP CONSTRAINT unique_name;
 
+--изменено
+DROP FUNCTION edit_task;
 CREATE OR REPLACE FUNCTION edit_task(
     p_id NUMERIC,
     p_name VARCHAR,
-    p_text TEXT
+    p_text TEXT,
+    p_points INTEGER
 ) RETURNS BOOLEAN AS $$
 BEGIN
+    IF p_points IS NULL THEN
+        RAISE EXCEPTION 'Task points cannot be null';
+    END IF;
+
     IF p_id IS NULL THEN
         RAISE EXCEPTION 'Task id cannot be null';
     END IF;
@@ -858,7 +867,7 @@ BEGIN
     END IF;
 
     UPDATE Tasks 
-    SET name = p_name, text = p_text 
+    SET name = p_name, text = p_text, points = p_points
     WHERE id = p_id;
     
     IF FOUND THEN
@@ -869,6 +878,59 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
 ALTER TABLE USER_LISTS
 ADD CONSTRAINT unique_list_name UNIQUE (name);
+
+
+
+
+---------------------------
+CREATE OR REPLACE FUNCTION delete_full_task(p_task_id INTEGER)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_task_id IS NULL THEN
+        RAISE EXCEPTION 'Task id cannot be null';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM TASKS WHERE id = p_task_id) THEN
+        RAISE EXCEPTION 'Task with id % does not exist', p_task_id;
+    END IF;
+
+    DELETE FROM CONFIRM_TASKS WHERE task_id = p_task_id;
+
+    DELETE FROM TASKS WHERE id = p_task_id;
+
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION delete_full_lesson(p_lesson_id INTEGER)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_lesson_id IS NULL THEN
+        RAISE EXCEPTION 'Lesson id cannot be null';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Lessons WHERE id = p_lesson_id) THEN
+        RAISE EXCEPTION 'Lesson with id % does not exist', p_lesson_id;
+    END IF;
+
+    DELETE FROM CONFIRM_LESSONS WHERE lesson_id = p_lesson_id;
+
+    DELETE FROM Lessons WHERE id = p_lesson_id;
+
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE TASKS TO crypto_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE CONFIRM_TASKS TO crypto_admin;
+
+GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE Lessons TO crypto_admin;
+GRANT SELECT, INSERT, DELETE ON TABLE CONFIRM_LESSONS TO crypto_admin;

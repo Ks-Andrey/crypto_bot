@@ -11,7 +11,7 @@ const commands = {
 const authKeyboard = {
     reply_markup: {
         keyboard: [
-            [commands.wallet, commands.add_ref,], [commands.library, commands.tasks], [commands.statistics]
+            [commands.wallet, commands.add_ref,], [commands.statistics, commands.tasks], [commands.library]
         ], 
         resize_keyboard: true
     }
@@ -20,7 +20,7 @@ const authKeyboard = {
 const adminKeyboard = {
     reply_markup: {
         keyboard: [
-            [commands.wallet, commands.add_ref], [commands.tasks, commands.library], [commands.broadcast, commands.statistics]
+            [commands.wallet, commands.add_ref], [commands.tasks, commands.statistics], [commands.broadcast, commands.library]
         ], 
         resize_keyboard: true
     }
@@ -29,8 +29,8 @@ const adminKeyboard = {
 const tasksKeyboard = {
     inline_keyboard: [
       [
-        { text: 'Задания', callback_data: `tasks` },
-        { text: 'Архив', callback_data: `archive` }
+        { text: 'Архив', callback_data: `archive` },
+        { text: 'Задания', callback_data: `tasks` }
       ]
     ],
     resize_keyboard: true
@@ -39,8 +39,8 @@ const tasksKeyboard = {
 const lessonsKeyboard = {
     inline_keyboard: [
       [
-        { text: 'Базовый курс', callback_data: `default_lessons` },
-        { text: 'Расширенный курс', callback_data: `extended_lessons` }
+        { text: 'Расширенный курс', callback_data: `extended_lessons` },
+        { text: 'Базовый курс', callback_data: `default_lessons` }
       ]
     ],
     resize_keyboard: true

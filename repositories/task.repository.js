@@ -85,10 +85,19 @@ class TaskRepository {
         }
     }
 
-    async editTask(taskId, name, text) {
+    async editTask(taskId, name, text, points) {
         try {
-            const result = await this.client.query('SELECT edit_task($1, $2, $3)', [taskId, name, text]);
+            const result = await this.client.query('SELECT edit_task($1, $2, $3, $4)', [taskId, name, text, points]);
             return result.rows[0].edit_task;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async deleteFullTask(taskId) {
+        try {
+            const result = await this.client.query('SELECT delete_full_task($1)', [taskId]);
+            return result.rows[0].delete_full_task;
         } catch (error) {
             throw error;
         }

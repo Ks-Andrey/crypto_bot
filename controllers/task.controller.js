@@ -70,11 +70,22 @@ class TaskController {
 
     async editTask(req, res) {
         const id = req.params.id;
-        const { name, text } = req.body;
+        const { name, text, points } = req.body;
 
         try {
-            const isEdited = await this.adminRepository.editTask(id, name, text);
+            const isEdited = await this.adminRepository.editTask(id, name, text, points);
             res.json({ status: isEdited });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async deleteFullTask(req, res) {
+        const { id } = req.body;
+
+        try {
+            const isDeleted = await this.adminRepository.deleteFullTask(id);
+            res.json({ status: isDeleted });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }

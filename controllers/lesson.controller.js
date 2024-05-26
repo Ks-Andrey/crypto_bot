@@ -68,11 +68,22 @@ class LessonController {
     
     async editLesson(req, res) {
         const id = req.params.id;
-        const { name, text, photo_path } = req.body;
+        const { name, text, photo_path, points } = req.body;
 
         try {
-            const isEdited = await this.adminRepository.editLesson(id, name, text, photo_path);
+            const isEdited = await this.adminRepository.editLesson(id, name, text, photo_path, points);
             res.json({ status: isEdited });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async deleteFullLesson(req, res) {
+        const { id } = req.body;
+
+        try {
+            const isDeleted = await this.adminRepository.deleteFullLesson(id);
+            res.json({ status: isDeleted });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }

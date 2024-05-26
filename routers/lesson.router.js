@@ -13,6 +13,7 @@ router.get('/lesson/:id', lessonController.getLesson.bind(lessonController));
 router.post('/lessons/add', lessonController.addLesson.bind(lessonController));
 router.post('/lessons/delete', lessonController.deleteLesson.bind(lessonController));
 router.post('/lessons/photo', lessonController.uploadPhoto.bind(lessonController));
-router.put('/lesson/:id', lessonController.editLesson.bind(lessonController))
+router.put('/lesson/:id', lessonController.editLesson.bind(lessonController));
+router.delete('/lessons/delete', lessonController.deleteFullLesson.bind(lessonController));
 
 module.exports = router;

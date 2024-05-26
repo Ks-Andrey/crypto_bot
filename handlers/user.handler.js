@@ -145,7 +145,7 @@ class UserHandler {
       const refLink = `${botLink}?start=${chatId}`;
       const referrals = await this.userRepository.getUserReferrals(chatId);
 
-      this.bot.sendMessage(chatId, `Пригласите друзей и получайте 500 XP за каждого. Реферал засчитывается после того, как друг добавит свой кошелек в бота\n\nСсылка для приглашения:\n${refLink}\n\nОбщее количество рефералов: ${referrals.length}`);
+      this.bot.sendMessage(chatId, `Пригласите друзей и получайте 500★ за каждого. Реферал засчитывается после того, как друг добавит свой кошелек в бота\n\nСсылка для приглашения:\n${refLink}\n\nОбщее количество рефералов: ${referrals.length}`);
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
@@ -196,7 +196,7 @@ class UserHandler {
   }
 
   async openTasks(chatId, messageId = null) {
-    const text = 'Для достижения прогресса в обучении обязательно выполняйте задания. Мы сделали их максимально простыми. За выполнение заданий вы получаете внутренние очки.';
+    const text = 'Для достижения прогресса в обучении обязательно выполняйте задания. Мы сделали их максимально простыми. За выполнение заданий вы получаете внутренние очки';
 
     if (messageId) {
       this.bot.editMessageText(text, {
@@ -225,7 +225,7 @@ class UserHandler {
         }
 
         const lessonButtons = lessons.map(({ id, name }) => [{ text: name, callback_data: `lesson_${id}` }]);
-        this.bot.editMessageText('Скоро..', {
+        this.bot.editMessageText(typeId == 0 ? 'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON' : 'Выберите:', {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: {

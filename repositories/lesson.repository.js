@@ -67,10 +67,19 @@ class LessonRepository {
         }
     }
 
-    async editLesson(lessonId, name, text, path) {
+    async editLesson(lessonId, name, text, path, points) {
         try {
-            const result = await this.client.query('SELECT edit_lesson($1, $2, $3, $4)', [lessonId, name, text, path]);
+            const result = await this.client.query('SELECT edit_lesson($1, $2, $3, $4, $5)', [lessonId, name, text, path, points]);
             return result.rows[0].edit_lesson;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async deleteFullLesson(lessonId) {
+        try {
+            const result = await this.client.query('SELECT delete_full_lesson($1)', [lessonId]);
+            return result.rows[0].delete_full_lesson;
         } catch (error) {
             throw error;
         }
