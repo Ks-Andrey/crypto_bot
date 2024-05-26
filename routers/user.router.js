@@ -17,7 +17,7 @@ router.post('/auth', userController.authAdmin.bind(userController));
 router.get('/lists', userController.getLists.bind(userController));
 router.get('/lists/user/:id', userController.getListsByUser.bind(userController));
 router.post('/lists/add', userController.addList.bind(userController));
-router.post('/lists/delete', userController.deleteList.bind(userController));
+router.delete('/lists/delete', userController.deleteList.bind(userController));
 router.post('/list/:id/add', userController.addUserToList.bind(userController));
 router.post('/list/:id/delete', userController.deleteUserFromList.bind(userController));
 router.get('/list/:id', userController.getUsersFromList.bind(userController));

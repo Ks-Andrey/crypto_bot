@@ -58,7 +58,7 @@ class TaskController {
     }
 
     async getTaskUsers(req, res) {
-        const taskId= req.params.id;
+        const taskId = req.params.id;
 
         try {
             const users = await this.adminRepository.getTaskUsersById(taskId);

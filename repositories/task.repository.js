@@ -40,6 +40,15 @@ class TaskRepository {
         }
     }
 
+    async getUserTasksRange(userId, limit, offset) {
+        try {
+            const result = await this.client.query('SELECT *, COUNT(*) OVER () AS total_count FROM get_user_tasks($1) LIMIT $2 OFFSET $3', [userId, limit, offset]);
+            return result.rows;
+        } catch (error) {
+            throw error;   
+        }
+    }
+
     async getTaskById(taskId) {
         try {
             const result = await this.client.query('SELECT * FROM get_task($1)', [taskId]);
@@ -64,6 +73,15 @@ class TaskRepository {
             return result.rows;
         } catch (error) {
             throw error;
+        }
+    }
+
+    async getCompletedTasksRange(userId, limit, offset) {
+        try {
+            const result = await this.client.query('SELECT *, COUNT(*) OVER () AS total_count FROM get_completed_tasks($1) LIMIT $2 OFFSET $3', [userId, limit, offset]);
+            return result.rows;
+        } catch (error) {
+            throw error;   
         }
     }
 

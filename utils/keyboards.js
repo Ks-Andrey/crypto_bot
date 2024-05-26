@@ -39,8 +39,8 @@ const tasksKeyboard = {
 const lessonsKeyboard = {
     inline_keyboard: [
       [
-        { text: 'Расширенный курс', callback_data: `extended_page_1` },
-        { text: 'Базовый курс', callback_data: `default_page_1` }
+        { text: 'Расширенный', callback_data: `extended_page_1` },
+        { text: 'Базовый', callback_data: `default_page_1` }
       ]
     ],
     resize_keyboard: true

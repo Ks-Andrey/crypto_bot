@@ -211,33 +211,6 @@ class UserHandler {
     }
   }
 
-  // async openLessonList(chatId, messageId, typeId) {
-  //   try {
-  //     const lessons = await this.lessonRepository.getUserLessons(typeId);
-
-  //     if (lessons.length === 0) {
-  //       this.bot.editMessageText('Скоро..', {
-  //         chat_id: chatId,
-  //         message_id: messageId,
-  //         reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_lesson` }]] }
-  //       });
-  //       return;
-  //     }
-
-  //     const lessonButtons = lessons.map(({ id, name }) => [{ text: name, callback_data: `lesson_${id}` }]);
-  //     this.bot.editMessageText(typeId == 0 ? 'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON' : 'Выберите:', {
-  //       chat_id: chatId,
-  //       message_id: messageId,
-  //       reply_markup: {
-  //         inline_keyboard: lessonButtons,
-  //         resize_keyboard: true
-  //       }
-  //     });
-  //   } catch (error) {
-  //     ErrorHandler.handleError(error, chatId, this.bot);
-  //   }
-  // }
-
   async processWallet(chatId, wallet) {
     if (!TonWeb.utils.Address.isValid(wallet)) {
       this.bot.sendMessage(chatId, 'Неверный формат кошелька, попробуйте еще раз!');
@@ -414,15 +387,13 @@ class UserHandler {
   async generateList(chatId, data, messageId, elementGetter, emptyMessage, text, backButtonData, itemCallbackPrefix, typeId = null) {
     try {
       const page = parseInt(data.split('_')[2], 10);
-      const elementsPerPage = 5;
-      const elements = typeId !== null ? await elementGetter(typeId) : await elementGetter(chatId);
-      const totalPages = Math.ceil(elements.length / elementsPerPage);
-      const startIdx = (page - 1) * elementsPerPage;
-      const endIdx = startIdx + elementsPerPage;
+      const limit = 5;
+      const offset = (page - 1) * limit;
+      const elements = typeId !== null ? await elementGetter(typeId, limit, offset) : await elementGetter(chatId, limit, offset);
+      const elementsCount = elements[0]?.total_count || 1;
+      const totalPages = Math.ceil(elementsCount / limit); 
 
-      const elementsToShow = elements.slice(startIdx, endIdx);
-
-      if (elementsToShow.length === 0) {
+      if (elements.length === 0) {
         this.bot.editMessageText(emptyMessage, {
           chat_id: chatId,
           message_id: messageId,
@@ -431,7 +402,7 @@ class UserHandler {
         return;
       }
 
-      const taskButtons = elementsToShow.map(({ id, name }) => [{ text: name, callback_data: `${itemCallbackPrefix}_${id}` }]);
+      const elementButtons = elements.map(({ id, name }) => [{ text: name, callback_data: `${itemCallbackPrefix}_${id}` }]);
 
       const paginationButtons = [];
       if (totalPages > 1) {
@@ -443,7 +414,7 @@ class UserHandler {
         chat_id: chatId,
         message_id: messageId,
         reply_markup: {
-          inline_keyboard: [...taskButtons, paginationButtons],
+          inline_keyboard: [...elementButtons, paginationButtons],
           resize_keyboard: true
         }
       });
@@ -457,7 +428,7 @@ class UserHandler {
       chatId,
       data,
       messageId,
-      this.taskRepository.getCompletedTasks.bind(this.taskRepository),
+      this.taskRepository.getCompletedTasksRange.bind(this.taskRepository),
       'Архив заданий пуст!',
       'Выберите: ',
       'back_task',
@@ -470,7 +441,7 @@ class UserHandler {
       chatId,
       data,
       messageId,
-      this.taskRepository.getUserTasks.bind(this.taskRepository),
+      this.taskRepository.getUserTasksRange.bind(this.taskRepository),
       'Список заданий пуст!',
       'Выберите: ',
       'back_task',
@@ -483,14 +454,14 @@ class UserHandler {
         chatId,
         data,
         messageId,
-        this.lessonRepository.getUserLessons.bind(this.lessonRepository),
+        this.lessonRepository.getUserLessonsRange.bind(this.lessonRepository),
         'Скоро...',
         typeId === 0 ? 'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON' : 'Выберите: ',
         'back_lesson',
         'lesson',
         typeId
     );
-}
+  }
 }
 
 module.exports = UserHandler;

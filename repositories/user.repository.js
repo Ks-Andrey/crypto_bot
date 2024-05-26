@@ -150,8 +150,8 @@ class UserRepository {
 
     async deleteList(listId) {
         try {
-            const result = await this.client.query('SELECT * FROM delete_list($1)', [listId]);
-            return result.rows;
+            const result = await this.client.query('SELECT delete_list($1)', [listId]);
+            return result.rows[0].delete_list;
         } catch (error) {
             throw error;
         }

@@ -13,7 +13,7 @@ class LessonRepository {
         this.client.connect();
     }
 
-    async addLesson(name, text, type_id, points, path) {
+    async addLesson(name, text, type_id = 0, points, path) {
         try {
             const result = await this.client.query('SELECT add_lesson($1, $2, $3, $4, $5)', [name, text, type_id, points, path]);
             return result.rows[0].add_lesson;
@@ -37,6 +37,15 @@ class LessonRepository {
             return result.rows;
         } catch (error) {
             throw error;
+        }
+    }
+
+    async getUserLessonsRange(typeId, limit, offset) {
+        try {
+            const result = await this.client.query('SELECT *, COUNT(*) OVER () AS total_count FROM get_user_lessons($1) LIMIT $2 OFFSET $3', [typeId, limit, offset]);
+            return result.rows;
+        } catch (error) {
+            throw error;   
         }
     }
 

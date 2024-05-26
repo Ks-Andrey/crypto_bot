@@ -244,7 +244,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 DROP FUNCTION edit_lesson;
 CREATE OR REPLACE FUNCTION edit_lesson(
     p_id NUMERIC,
@@ -612,7 +611,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION add_points_to_referrer()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -837,7 +835,6 @@ GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_lists_id_seq TO crypto_admin;
 
 ALTER TABLE Lessons DROP CONSTRAINT unique_name;
 
---изменено
 DROP FUNCTION edit_task;
 CREATE OR REPLACE FUNCTION edit_task(
     p_id NUMERIC,
@@ -881,10 +878,6 @@ $$ LANGUAGE plpgsql;
 ALTER TABLE USER_LISTS
 ADD CONSTRAINT unique_list_name UNIQUE (name);
 
-
-
-
----------------------------
 CREATE OR REPLACE FUNCTION delete_full_task(p_task_id INTEGER)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -934,3 +927,75 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE CONFIRM_TASKS TO crypto_admin;
 
 GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE Lessons TO crypto_admin;
 GRANT SELECT, INSERT, DELETE ON TABLE CONFIRM_LESSONS TO crypto_admin;
+
+
+
+
+-- CREATE OR REPLACE FUNCTION get_user_tasks_range(
+--     p_user_id NUMERIC,
+--     p_min_row INTEGER DEFAULT 0,
+--     p_max_row INTEGER DEFAULT 50
+-- ) RETURNS TABLE(
+--     ID INTEGER,
+--     NAME VARCHAR(100)
+-- ) AS $$
+-- BEGIN
+--     IF p_user_id IS NULL THEN
+--         RAISE EXCEPTION 'User id cannot be null';
+--     END IF;
+
+--     IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = p_user_id) THEN
+--         RAISE EXCEPTION 'User with id % does not exist', p_user_id;
+--     END IF;
+
+--     RETURN QUERY
+--     SELECT TASKS.ID, TASKS.NAME
+--     FROM TASKS 
+--     WHERE TASKS.id NOT IN (SELECT CONFIRM_TASKS.TASK_ID FROM CONFIRM_TASKS WHERE CONFIRM_TASKS.USER_ID = p_user_id) 
+--       AND is_deleted = FALSE
+--     ORDER BY TASKS.ID
+--     LIMIT p_max_row - p_min_row + 1 OFFSET p_min_row;
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+-- CREATE OR REPLACE FUNCTION get_completed_tasks_range(
+--     p_user_id NUMERIC,
+--     p_min_row INTEGER DEFAULT 0,
+--     p_max_row INTEGER DEFAULT 50
+-- ) RETURNS TABLE (
+--     ID INTEGER,
+--     NAME VARCHAR(100),
+--     USER_ID NUMERIC
+-- ) AS $$
+-- BEGIN
+--     IF p_user_id IS NULL THEN
+--         RAISE EXCEPTION 'User id cannot be null';
+--     END IF;
+
+--     IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = p_user_id) THEN
+--         RAISE EXCEPTION 'User with id % does not exist', p_user_id;
+--     END IF;
+
+--     RETURN QUERY
+--     SELECT TASKS.ID, TASKS.NAME, CONFIRM_TASKS.USER_ID
+--     FROM CONFIRM_TASKS
+--     INNER JOIN TASKS ON TASKS.ID = CONFIRM_TASKS.TASK_ID
+--     WHERE CONFIRM_TASKS.USER_ID = p_user_id
+--     ORDER BY TASKS.ID
+--     LIMIT p_max_row - p_min_row + 1 OFFSET p_min_row;
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+-- CREATE OR REPLACE FUNCTION get_user_lessons_range(
+--     p_type_id INTEGER,
+--     p_min_row INTEGER DEFAULT 0,
+--     p_max_row INTEGER DEFAULT 50
+-- ) RETURNS SETOF Lessons AS $$
+-- BEGIN
+--     RETURN QUERY
+--     SELECT * FROM Lessons 
+--     WHERE is_deleted = FALSE AND type_id = p_type_id
+--     ORDER BY id
+--     LIMIT p_max_row - p_min_row + 1 OFFSET p_min_row;
+-- END;
+-- $$ LANGUAGE plpgsql;

@@ -131,10 +131,10 @@ class UserController {
     }
 
     async deleteList(req, res) {
-        const { listId } = req.body;
+        const { id } = req.body;
 
         try {
-            const isDeleted = await this.adminRepository.deleteList(listId);
+            const isDeleted = await this.adminRepository.deleteList(id);
             res.json({ status: isDeleted });
         } catch (error) {
             res.status(500).json({ error: error.message })
