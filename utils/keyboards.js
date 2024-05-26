@@ -29,8 +29,8 @@ const adminKeyboard = {
 const tasksKeyboard = {
     inline_keyboard: [
       [
-        { text: 'Архив', callback_data: `archive` },
-        { text: 'Задания', callback_data: `tasks` }
+        { text: 'Архив', callback_data: `archives_page_1` },
+        { text: 'Задания', callback_data: `tasks_page_1` }
       ]
     ],
     resize_keyboard: true
@@ -39,8 +39,8 @@ const tasksKeyboard = {
 const lessonsKeyboard = {
     inline_keyboard: [
       [
-        { text: 'Расширенный курс', callback_data: `extended_lessons` },
-        { text: 'Базовый курс', callback_data: `default_lessons` }
+        { text: 'Расширенный курс', callback_data: `extended_page_1` },
+        { text: 'Базовый курс', callback_data: `default_page_1` }
       ]
     ],
     resize_keyboard: true

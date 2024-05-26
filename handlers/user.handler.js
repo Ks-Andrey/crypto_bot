@@ -1,7 +1,7 @@
 require('dotenv').config();
 const TonWeb = require("tonweb");
 const { tasksKeyboard, authKeyboard, adminKeyboard, commands, lessonsKeyboard } = require('../utils/keyboards');
-const ErrorHandler = require('../utils/error.handler'); 
+const ErrorHandler = require('../utils/error.handler');
 
 class UserHandler {
   constructor(bot, userRepository, taskRepository, lessonRepository, adminId) {
@@ -53,22 +53,22 @@ class UserHandler {
         await this.processTaskSelection(chatId, data, callbackQuery.message.message_id);
       } else if (data.startsWith('done_')) {
         await this.proccessConfirmTask(chatId, data, callbackQuery.message.message_id);
-      } else if (data.startsWith('confirm_')){
+      } else if (data.startsWith('confirm_')) {
         await this.processTaskCompletion(chatId, data, callbackQuery.message.message_id);
       } else if (data.startsWith('archive_')) {
-        await this.processArchiveSelection(chatId, data, callbackQuery.message.message_id); 
-      } else if (data == 'tasks') {
-        await this.openTaskList(chatId, callbackQuery.message.message_id);
-      } else if (data == 'archive') {
-        await this.openArchiveList(chatId, callbackQuery.message.message_id);
+        await this.processArchiveSelection(chatId, data, callbackQuery.message.message_id);
+      } else if (data.startsWith('tasks_page_')) {
+        await this.openTaskList(chatId, data, callbackQuery.message.message_id);
+      } else if (data.startsWith('archives_page_')) {
+        await this.openArchiveList(chatId, data, callbackQuery.message.message_id);
       } else if (data == 'back_task') {
         await this.openTasks(chatId, callbackQuery.message.message_id);
       } else if (data == 'back_lesson') {
         await this.openLibrary(chatId, callbackQuery.message.message_id);
-      } else if (data == 'default_lessons') {
-        await this.openLessonList(chatId, callbackQuery.message.message_id, 0);
-      } else if (data == 'extended_lessons') {
-        await this.openLessonList(chatId, callbackQuery.message.message_id, 1);
+      } else if (data.startsWith('default_page_')) {
+        await this.openLessonList(chatId, data, callbackQuery.message.message_id, 0);
+      } else if (data.startsWith('extended_page_')) {
+        await this.openLessonList(chatId, data, callbackQuery.message.message_id, 1);
       } else if (data.startsWith('lesson_')) {
         await this.processLessonSelection(chatId, data, callbackQuery.message.message_id);
       } else if (data == 'add_wallet') {
@@ -89,7 +89,7 @@ class UserHandler {
     try {
       const user = await this.userRepository.getUserById(chatId);
       const wallet = user[0]?.wallet;
-      
+
       if (user.length === 0) {
         await this.userRepository.addUser(chatId, username, '', referralCode);
       }
@@ -125,7 +125,7 @@ class UserHandler {
           parse_mode: "HTML",
           reply_markup: {
             inline_keyboard: [
-              [{text: user[0]?.wallet ? 'Изменить кошелек' : 'Добавить кошелек', callback_data: 'add_wallet'}]
+              [{ text: user[0]?.wallet ? 'Изменить кошелек' : 'Добавить кошелек', callback_data: 'add_wallet' }]
             ]
           }
         });
@@ -162,17 +162,17 @@ class UserHandler {
       const topUsers = await this.userRepository.getTopUsers(chatId);
 
       let message = '🏆 <b>Активные пользователи:</b>\n\n';
-  
+
       topUsers.forEach(user => {
         message += `${user.place}. ${user.name}: ${user.total_points}★\n`;
       });
-  
+
       const specificUser = topUsers.find(user => user.user_id == chatId);
-  
+
       if (specificUser.place > 10) {
         message += `\nВаше место: ${specificUser.place}\nОчки: ${specificUser.total_points}★`;
       }
-  
+
       await this.bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
     } catch (error) {
       console.error('Ошибка при открытии статистики:', error);
@@ -184,13 +184,13 @@ class UserHandler {
 
     if (messageId) {
       this.bot.sendMessage(chatId, text, {
-          reply_markup: lessonsKeyboard
+        reply_markup: lessonsKeyboard
       });
 
       this.bot.deleteMessage(chatId, messageId);
     } else {
       this.bot.sendMessage(chatId, text, {
-          reply_markup: lessonsKeyboard
+        reply_markup: lessonsKeyboard
       });
     }
   }
@@ -204,39 +204,39 @@ class UserHandler {
         message_id: messageId,
         reply_markup: tasksKeyboard
       });
-    }else{
+    } else {
       this.bot.sendMessage(chatId, text, {
         reply_markup: tasksKeyboard
       });
     }
   }
 
-  async openLessonList(chatId, messageId, typeId) {
-    try {
-        const lessons = await this.lessonRepository.getUserLessons(typeId);
+  // async openLessonList(chatId, messageId, typeId) {
+  //   try {
+  //     const lessons = await this.lessonRepository.getUserLessons(typeId);
 
-        if (lessons.length === 0) {
-            this.bot.editMessageText('Скоро..', {
-                chat_id: chatId,
-                message_id: messageId,
-                reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_lesson` }]] }
-            });
-            return;
-        }
+  //     if (lessons.length === 0) {
+  //       this.bot.editMessageText('Скоро..', {
+  //         chat_id: chatId,
+  //         message_id: messageId,
+  //         reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_lesson` }]] }
+  //       });
+  //       return;
+  //     }
 
-        const lessonButtons = lessons.map(({ id, name }) => [{ text: name, callback_data: `lesson_${id}` }]);
-        this.bot.editMessageText(typeId == 0 ? 'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON' : 'Выберите:', {
-            chat_id: chatId,
-            message_id: messageId,
-            reply_markup: {
-                inline_keyboard: lessonButtons,
-                resize_keyboard: true
-            }
-        });
-    } catch (error) {
-        ErrorHandler.handleError(error, chatId, this.bot);
-    }
-  }
+  //     const lessonButtons = lessons.map(({ id, name }) => [{ text: name, callback_data: `lesson_${id}` }]);
+  //     this.bot.editMessageText(typeId == 0 ? 'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON' : 'Выберите:', {
+  //       chat_id: chatId,
+  //       message_id: messageId,
+  //       reply_markup: {
+  //         inline_keyboard: lessonButtons,
+  //         resize_keyboard: true
+  //       }
+  //     });
+  //   } catch (error) {
+  //     ErrorHandler.handleError(error, chatId, this.bot);
+  //   }
+  // }
 
   async processWallet(chatId, wallet) {
     if (!TonWeb.utils.Address.isValid(wallet)) {
@@ -295,14 +295,14 @@ class UserHandler {
     const lessonId = parseInt(data.split('_')[1], 10);
     try {
       const lesson = await this.lessonRepository.getLessonById(lessonId);
-  
+
       if (lesson.length === 0) {
         this.bot.sendMessage(chatId, 'Такого урока не существует!');
         return;
       }
-  
+
       await this.lessonRepository.acceptLesson(chatId, lessonId);
-  
+
       if (lesson[0]?.photo_path) {
         await this.bot.sendPhoto(chatId, __dirname + lesson[0].photo_path, {
           caption: lesson[0].text,
@@ -325,13 +325,13 @@ class UserHandler {
           }
         });
       }
-  
+
       await this.bot.deleteMessage(chatId, messageId);
-  
+
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
-  }  
+  }
 
   async processArchiveSelection(chatId, data, messageId) {
     const taskId = parseInt(data.split('_')[1], 10);
@@ -360,7 +360,7 @@ class UserHandler {
 
   async processTaskCompletion(chatId, data, messageId) {
     const taskId = parseInt(data.split('_')[1], 10);
-    
+
     try {
       const isAccept = await this.taskRepository.acceptTask(chatId, taskId);
 
@@ -369,7 +369,7 @@ class UserHandler {
           chat_id: chatId,
           message_id: messageId
         });
-        
+
         return;
       }
 
@@ -377,7 +377,7 @@ class UserHandler {
         chat_id: chatId,
         message_id: messageId
       });
- 
+
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
@@ -387,64 +387,10 @@ class UserHandler {
     const taskId = parseInt(data.split('_')[1], 10);
 
     this.bot.editMessageText('Вы уверены?', {
-      chat_id: chatId, 
+      chat_id: chatId,
       message_id: messageId,
-      reply_markup: { inline_keyboard: [[{ text: 'Да', callback_data: `confirm_${taskId}`}, { text: 'Нет', callback_data: 'back_task'}]] }
+      reply_markup: { inline_keyboard: [[{ text: 'Да', callback_data: `confirm_${taskId}` }, { text: 'Нет', callback_data: 'back_task' }]] }
     })
-  }
-
-  async openArchiveList(chatId, messageId) {
-    try {
-      const tasks = await this.taskRepository.getCompletedTasks(chatId);
-
-      if (tasks.length === 0) {
-        this.bot.editMessageText('Архив заданий пуст!', {
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_task` }]] }
-        });
-        return;
-      }
-
-      const tasksButtons = tasks.map(({ id, name }) => [{ text: name, callback_data: `archive_${id}` }]);
-      this.bot.editMessageText('Архив заданий:', {
-        chat_id: chatId,
-        message_id: messageId,
-        reply_markup: {
-          inline_keyboard: tasksButtons,
-          resize_keyboard: true
-        }
-      });
-    } catch (error) {
-      ErrorHandler.handleError(error, chatId, this.bot);
-    }
-  }
-
-  async openTaskList(chatId, messageId) {
-    try {
-      const tasks = await this.taskRepository.getUserTasks(chatId);
-
-      if (tasks.length === 0) {
-        this.bot.editMessageText('Список заданий пуст!', {
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: `back_task` }]] }
-        });
-        return;
-      }
-
-      const taskButtons = tasks.map(({ id, name }) => [{ text: name, callback_data: `task_${id}` }]);
-      this.bot.editMessageText('Список заданий:', {
-        chat_id: chatId,
-        message_id: messageId,
-        reply_markup: {
-          inline_keyboard: taskButtons,
-          resize_keyboard: true
-        }
-      });
-    } catch (error) {
-      ErrorHandler.handleError(error, chatId, this.bot);
-    }
   }
 
   async broadcastMessage(chatId, messageId) {
@@ -452,18 +398,99 @@ class UserHandler {
       const allUsers = await this.userRepository.getAllUsers();
 
       allUsers
-          .filter(user => user.id.toString() !== this.adminId)
-          .forEach(user => {
-              this.bot.copyMessage(user.id, chatId, messageId);
-          });
+        .filter(user => user.id.toString() !== this.adminId)
+        .forEach(user => {
+          this.bot.copyMessage(user.id, chatId, messageId);
+        });
     } catch (error) {
-        ErrorHandler.handleError(error, this.adminId, this.bot);
+      ErrorHandler.handleError(error, this.adminId, this.bot);
     }
   }
 
   clearUserState(chatId) {
     delete this.userState[chatId];
   }
+
+  async generateList(chatId, data, messageId, elementGetter, emptyMessage, text, backButtonData, itemCallbackPrefix, typeId = null) {
+    try {
+      const page = parseInt(data.split('_')[2], 10);
+      const elementsPerPage = 5;
+      const elements = typeId !== null ? await elementGetter(typeId) : await elementGetter(chatId);
+      const totalPages = Math.ceil(elements.length / elementsPerPage);
+      const startIdx = (page - 1) * elementsPerPage;
+      const endIdx = startIdx + elementsPerPage;
+
+      const elementsToShow = elements.slice(startIdx, endIdx);
+
+      if (elementsToShow.length === 0) {
+        this.bot.editMessageText(emptyMessage, {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: backButtonData }]] }
+        });
+        return;
+      }
+
+      const taskButtons = elementsToShow.map(({ id, name }) => [{ text: name, callback_data: `${itemCallbackPrefix}_${id}` }]);
+
+      const paginationButtons = [];
+      if (totalPages > 1) {
+        if (page > 1) paginationButtons.push({ text: '<<', callback_data: `${data.split('_')[0]}_page_${page - 1}` });
+        if (page < totalPages) paginationButtons.push({ text: '>>', callback_data: `${data.split('_')[0]}_page_${page + 1}` });
+      }
+
+      this.bot.editMessageText(`Страница ${page}/${totalPages}\n\n${text}`, {
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: {
+          inline_keyboard: [...taskButtons, paginationButtons],
+          resize_keyboard: true
+        }
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, chatId, this.bot);
+    }
+  }
+
+  async openArchiveList(chatId, data, messageId) {
+    await this.generateList(
+      chatId,
+      data,
+      messageId,
+      this.taskRepository.getCompletedTasks.bind(this.taskRepository),
+      'Архив заданий пуст!',
+      'Выберите: ',
+      'back_task',
+      'archive'
+    );
+  }
+
+  async openTaskList(chatId, data, messageId) {
+    await this.generateList(
+      chatId,
+      data,
+      messageId,
+      this.taskRepository.getUserTasks.bind(this.taskRepository),
+      'Список заданий пуст!',
+      'Выберите: ',
+      'back_task',
+      'task'
+    );
+  }
+
+  async openLessonList(chatId, data, messageId, typeId) {
+    await this.generateList(
+        chatId,
+        data,
+        messageId,
+        this.lessonRepository.getUserLessons.bind(this.lessonRepository),
+        'Скоро...',
+        typeId === 0 ? 'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON' : 'Выберите: ',
+        'back_lesson',
+        'lesson',
+        typeId
+    );
+}
 }
 
 module.exports = UserHandler;
