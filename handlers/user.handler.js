@@ -88,7 +88,6 @@ class UserHandler {
 
     try {
       const user = await this.userRepository.getUserById(chatId);
-      const wallet = user[0]?.wallet;
 
       if (user.length === 0) {
         await this.userRepository.addUser(chatId, username, '', referralCode);
@@ -183,11 +182,11 @@ class UserHandler {
     const text = 'Для получения знаний используйте библиотеку. Сейчас доступен только базовый курс. За изучение уроков вы получаете внутренние очки';
 
     if (messageId) {
-      this.bot.sendMessage(chatId, text, {
+      this.bot.editMessageText(text, {
+        chat_id: chatId,
+        message_id: messageId,
         reply_markup: lessonsKeyboard
       });
-
-      this.bot.deleteMessage(chatId, messageId);
     } else {
       this.bot.sendMessage(chatId, text, {
         reply_markup: lessonsKeyboard
@@ -254,7 +253,7 @@ class UserHandler {
         reply_markup: {
           inline_keyboard: [
             [{ text: 'Выполнено!', callback_data: `done_${task[0].id}` }],
-            [{ text: 'Назад', callback_data: `back_task` }]
+            [{ text: 'Назад', callback_data: `tasks_page_1` }]
           ],
           resize_keyboard: true
         }
@@ -268,7 +267,6 @@ class UserHandler {
     const lessonId = parseInt(data.split('_')[1], 10);
     try {
       const lesson = await this.lessonRepository.getLessonById(lessonId);
-
       if (lesson.length === 0) {
         this.bot.sendMessage(chatId, 'Такого урока не существует!');
         return;
@@ -282,7 +280,7 @@ class UserHandler {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
-              [{ text: 'Назад', callback_data: `back_lesson` }]
+              [{ text: 'Назад', callback_data: lesson[0].type_id == 0 ? 'default_page_1' : 'extended_page_1' }]
             ],
             resize_keyboard: true
           }
@@ -292,7 +290,7 @@ class UserHandler {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
-              [{ text: 'Назад', callback_data: `back_lesson` }]
+              [{ text: 'Назад', callback_data: lesson[0].type_id == 0 ? 'default_page_1' : 'extended_page_1' }]
             ],
             resize_keyboard: true
           }
@@ -321,7 +319,7 @@ class UserHandler {
         message_id: messageId,
         reply_markup: {
           inline_keyboard: [
-            [{ text: 'Назад', callback_data: `back_task` }]
+            [{ text: 'Назад', callback_data: `archives_page_1` }]
           ],
           resize_keyboard: true
         }
@@ -408,16 +406,31 @@ class UserHandler {
       if (totalPages > 1) {
         if (page > 1) paginationButtons.push({ text: '<<', callback_data: `${data.split('_')[0]}_page_${page - 1}` });
         if (page < totalPages) paginationButtons.push({ text: '>>', callback_data: `${data.split('_')[0]}_page_${page + 1}` });
-      }
+      } 
 
-      this.bot.editMessageText(`Страница ${page}/${totalPages}\n\n${text}`, {
-        chat_id: chatId,
-        message_id: messageId,
-        reply_markup: {
-          inline_keyboard: [...elementButtons, paginationButtons],
-          resize_keyboard: true
-        }
-      });
+      if (elements.some(element => element?.photo_path)) {
+        this.bot.sendMessage(chatId, `Страница ${page}/${totalPages}\n\n${text}`, {
+          reply_markup: {
+            inline_keyboard: [...elementButtons, paginationButtons, 
+              [{text: 'Назад', callback_data: backButtonData}]
+            ],
+            resize_keyboard: true
+          }
+        });
+
+        await this.bot.deleteMessage(chatId, messageId);
+      } else {
+        this.bot.editMessageText(`Страница ${page}/${totalPages}\n\n${text}`, {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: {
+            inline_keyboard: [...elementButtons, paginationButtons, 
+              [{text: 'Назад', callback_data: backButtonData}]
+            ],
+            resize_keyboard: true
+          }
+        });
+      }
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
@@ -430,7 +443,7 @@ class UserHandler {
       messageId,
       this.taskRepository.getCompletedTasksRange.bind(this.taskRepository),
       'Архив заданий пуст!',
-      'Выберите: ',
+      'Список заданий, которые вами выполнены: ',
       'back_task',
       'archive'
     );
@@ -443,7 +456,7 @@ class UserHandler {
       messageId,
       this.taskRepository.getUserTasksRange.bind(this.taskRepository),
       'Список заданий пуст!',
-      'Выберите: ',
+      'Выполнение каждого задания занимает не более 2 минут',
       'back_task',
       'task'
     );
@@ -456,7 +469,7 @@ class UserHandler {
         messageId,
         this.lessonRepository.getUserLessonsRange.bind(this.lessonRepository),
         'Скоро...',
-        typeId === 0 ? 'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON' : 'Выберите: ',
+        'После изучения уроков вы получите доступ к цифровой экономике, сможете быстро и безопасно обмениваться криптовалютой в Telegram на блокчейне TON',
         'back_lesson',
         'lesson',
         typeId
