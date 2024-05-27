@@ -32,7 +32,7 @@ bot.onText(new RegExp(commands.wallet), msg => userHandler.getUserWallet(msg.cha
 bot.onText(new RegExp(commands.add_ref), msg => userHandler.getReferralLink(msg.chat.id));
 bot.onText(new RegExp(commands.broadcast), msg => userHandler.sendBroadcastMessagePrompt(msg.chat.id));  
 bot.onText(new RegExp(commands.library), msg => userHandler.openLibrary(msg.chat.id));
-bot.onText(new RegExp(commands.tasks), msg => userHandler.openTasks(msg.chat.id));
+bot.onText(new RegExp(commands.tasks), msg => userHandler.openTaskList(msg.chat.id));
 bot.onText(new RegExp(commands.statistics), msg => userHandler.openStatistics(msg.chat.id));
 
 app.use('/api', userRouter);

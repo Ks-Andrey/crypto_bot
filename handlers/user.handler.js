@@ -55,14 +55,8 @@ class UserHandler {
         await this.proccessConfirmTask(chatId, data, callbackQuery.message.message_id);
       } else if (data.startsWith('confirm_')) {
         await this.processTaskCompletion(chatId, data, callbackQuery.message.message_id);
-      } else if (data.startsWith('archive_')) {
-        await this.processArchiveSelection(chatId, data, callbackQuery.message.message_id);
       } else if (data.startsWith('tasks_page_')) {
         await this.openTaskList(chatId, data, callbackQuery.message.message_id);
-      } else if (data.startsWith('archives_page_')) {
-        await this.openArchiveList(chatId, data, callbackQuery.message.message_id);
-      } else if (data == 'back_task') {
-        await this.openTasks(chatId, callbackQuery.message.message_id);
       } else if (data == 'back_lesson') {
         await this.openLibrary(chatId, callbackQuery.message.message_id);
       } else if (data.startsWith('default_page_')) {
@@ -194,22 +188,6 @@ class UserHandler {
     }
   }
 
-  async openTasks(chatId, messageId = null) {
-    const text = 'Для достижения прогресса в обучении обязательно выполняйте задания. Мы сделали их максимально простыми. За выполнение заданий вы получаете внутренние очки';
-
-    if (messageId) {
-      this.bot.editMessageText(text, {
-        chat_id: chatId,
-        message_id: messageId,
-        reply_markup: tasksKeyboard
-      });
-    } else {
-      this.bot.sendMessage(chatId, text, {
-        reply_markup: tasksKeyboard
-      });
-    }
-  }
-
   async processWallet(chatId, wallet) {
     if (!TonWeb.utils.Address.isValid(wallet)) {
       this.bot.sendMessage(chatId, 'Неверный формат кошелька, попробуйте еще раз!');
@@ -237,8 +215,10 @@ class UserHandler {
     }
   }
 
+  //page
   async processTaskSelection(chatId, data, messageId) {
     const taskId = parseInt(data.split('_')[1], 10);
+    const page = parseInt(data.split('_')[2], 10);
     try {
       const task = await this.taskRepository.getTaskById(taskId);
 
@@ -252,8 +232,8 @@ class UserHandler {
         message_id: messageId,
         reply_markup: {
           inline_keyboard: [
-            [{ text: 'Выполнено!', callback_data: `done_${task[0].id}` }],
-            [{ text: 'Назад', callback_data: `tasks_page_1` }]
+            [{ text: 'Выполнено!', callback_data: `done_${task[0].id}_${page}` }],
+            [{ text: 'Назад', callback_data: `tasks_page_${page}` }]
           ],
           resize_keyboard: true
         }
@@ -263,8 +243,10 @@ class UserHandler {
     }
   }
 
+  //page
   async processLessonSelection(chatId, data, messageId) {
     const lessonId = parseInt(data.split('_')[1], 10);
+    const page = parseInt(data.split('_')[2], 10);
     try {
       const lesson = await this.lessonRepository.getLessonById(lessonId);
       if (lesson.length === 0) {
@@ -280,7 +262,7 @@ class UserHandler {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
-              [{ text: 'Назад', callback_data: lesson[0].type_id == 0 ? 'default_page_1' : 'extended_page_1' }]
+              [{ text: 'Назад', callback_data: lesson[0].type_id == 0 ? `default_page_${page}` : `extended_page_${page}` }]
             ],
             resize_keyboard: true
           }
@@ -290,7 +272,7 @@ class UserHandler {
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
-              [{ text: 'Назад', callback_data: lesson[0].type_id == 0 ? 'default_page_1' : 'extended_page_1' }]
+              [{ text: 'Назад', callback_data: lesson[0].type_id == 0 ? `default_page_${page}` : `extended_page_${page}` }]
             ],
             resize_keyboard: true
           }
@@ -299,31 +281,6 @@ class UserHandler {
 
       await this.bot.deleteMessage(chatId, messageId);
 
-    } catch (error) {
-      ErrorHandler.handleError(error, chatId, this.bot);
-    }
-  }
-
-  async processArchiveSelection(chatId, data, messageId) {
-    const taskId = parseInt(data.split('_')[1], 10);
-    try {
-      const task = await this.taskRepository.getTaskById(taskId);
-
-      if (task.length === 0) {
-        this.bot.sendMessage(chatId, 'Такого задания не существует!');
-        return;
-      }
-
-      this.bot.editMessageText(task[0].text, {
-        chat_id: chatId,
-        message_id: messageId,
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: 'Назад', callback_data: `archives_page_1` }]
-          ],
-          resize_keyboard: true
-        }
-      });
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
@@ -344,23 +301,23 @@ class UserHandler {
         return;
       }
 
-      this.bot.editMessageText('Задание выполнено!', {
-        chat_id: chatId,
-        message_id: messageId
-      });
+      await this.openTaskList(chatId, 'tasks_page_1', messageId);
+      await this.bot.sendMessage(chatId, 'Задание выполнено!');
 
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
   }
 
+  //page
   async proccessConfirmTask(chatId, data, messageId) {
     const taskId = parseInt(data.split('_')[1], 10);
+    const page = parseInt(data.split('_')[2], 10);
 
     this.bot.editMessageText('Вы уверены?', {
       chat_id: chatId,
       message_id: messageId,
-      reply_markup: { inline_keyboard: [[{ text: 'Да', callback_data: `confirm_${taskId}` }, { text: 'Нет', callback_data: 'back_task' }]] }
+      reply_markup: { inline_keyboard: [[{ text: 'Да', callback_data: `confirm_${taskId}` }, { text: 'Нет', callback_data: `tasks_page_${page}` }]] }
     })
   }
 
@@ -400,7 +357,7 @@ class UserHandler {
         return;
       }
 
-      const elementButtons = elements.map(({ id, name }) => [{ text: name, callback_data: `${itemCallbackPrefix}_${id}` }]);
+      const elementButtons = elements.map(({ id, name }) => [{ text: name, callback_data: `${itemCallbackPrefix}_${id}_${page}` }]);
 
       const paginationButtons = [];
       if (totalPages > 1) {
@@ -408,25 +365,23 @@ class UserHandler {
         if (page < totalPages) paginationButtons.push({ text: '>>', callback_data: `${data.split('_')[0]}_page_${page + 1}` });
       } 
 
-      if (elements.some(element => element?.photo_path)) {
+      if (elements.some(element => element?.photo_path) || messageId === null) {
         this.bot.sendMessage(chatId, `Страница ${page}/${totalPages}\n\n${text}`, {
           reply_markup: {
             inline_keyboard: [...elementButtons, paginationButtons, 
-              [{text: 'Назад', callback_data: backButtonData}]
-            ],
+              ...(backButtonData ? [[{ text: 'Назад', callback_data: backButtonData }]] : [])],
             resize_keyboard: true
           }
         });
 
-        await this.bot.deleteMessage(chatId, messageId);
+        messageId && await this.bot.deleteMessage(chatId, messageId);
       } else {
         this.bot.editMessageText(`Страница ${page}/${totalPages}\n\n${text}`, {
           chat_id: chatId,
           message_id: messageId,
           reply_markup: {
             inline_keyboard: [...elementButtons, paginationButtons, 
-              [{text: 'Назад', callback_data: backButtonData}]
-            ],
+              ...(backButtonData ? [[{ text: 'Назад', callback_data: backButtonData }]] : [])],
             resize_keyboard: true
           }
         });
@@ -436,28 +391,15 @@ class UserHandler {
     }
   }
 
-  async openArchiveList(chatId, data, messageId) {
-    await this.generateList(
-      chatId,
-      data,
-      messageId,
-      this.taskRepository.getCompletedTasksRange.bind(this.taskRepository),
-      'Архив заданий пуст!',
-      'Список заданий, которые вами выполнены: ',
-      'back_task',
-      'archive'
-    );
-  }
-
-  async openTaskList(chatId, data, messageId) {
+  async openTaskList(chatId, data = 'tasks_page_1', messageId = null) {
     await this.generateList(
       chatId,
       data,
       messageId,
       this.taskRepository.getUserTasksRange.bind(this.taskRepository),
       'Список заданий пуст!',
-      'Выполнение каждого задания занимает не более 2 минут',
-      'back_task',
+      'Для достижения прогресса в обучении обязательно выполняйте задания. Мы сделали их максимально простыми. За выполнение заданий вы получаете внутренние очки',
+      null,
       'task'
     );
   }
