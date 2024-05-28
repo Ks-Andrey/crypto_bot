@@ -23,4 +23,6 @@ router.post('/list/:id/delete', userController.deleteUserFromList.bind(userContr
 router.get('/list/:id', userController.getUsersFromList.bind(userController));
 router.post('/list/:id/broadcast', userController.broadcastMessage.bind(userController));
 
+router.get('/statistics', userController.getAllStatistics.bind(userController));
+
 module.exports = router;

@@ -161,6 +161,15 @@ class UserController {
             res.status(500).json({ error: error.message });
         }
     }
+
+    async getAllStatistics(req, res) {
+        try {
+            const statistics = await this.adminRepository.getAllStatistics();
+            res.json({ statistics });
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
 }
 
 module.exports = UserController;

@@ -94,9 +94,18 @@ class UserRepository {
         }
     }
     
-    async getTopUsers(userId) {
+    async getTopUsers(userId = null) {
         try {
             const result = await this.client.query('SELECT * FROM get_top_users($1)', [userId]);
+            return result.rows;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async getTopUsersByRefs(userId = null) {
+        try {
+            const result = await this.client.query('SELECT * FROM get_top_users_by_refs($1)', [userId]);
             return result.rows;
         } catch (error) {
             throw error;
@@ -152,6 +161,15 @@ class UserRepository {
         try {
             const result = await this.client.query('SELECT delete_list($1)', [listId]);
             return result.rows[0].delete_list;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async getAllStatistics() {
+        try {
+            const result = await this.client.query('SELECT * FROM get_all_statistics()');
+            return result.rows;
         } catch (error) {
             throw error;
         }

@@ -47,26 +47,33 @@ class UserHandler {
   async handleCallbackQuery(callbackQuery) {
     const chatId = callbackQuery.message.chat.id;
     const data = callbackQuery.data;
+    const messageId = callbackQuery.message.message_id;
 
     try {
       if (data.startsWith('task_')) {
-        await this.processTaskSelection(chatId, data, callbackQuery.message.message_id);
+        await this.processTaskSelection(chatId, data, messageId);
       } else if (data.startsWith('done_')) {
-        await this.proccessConfirmTask(chatId, data, callbackQuery.message.message_id);
+        await this.proccessConfirmTask(chatId, data, messageId);
       } else if (data.startsWith('confirm_')) {
-        await this.processTaskCompletion(chatId, data, callbackQuery.message.message_id);
+        await this.processTaskCompletion(chatId, data, messageId);
       } else if (data.startsWith('tasks_page_')) {
-        await this.openTaskList(chatId, data, callbackQuery.message.message_id);
+        await this.openTaskList(chatId, data, messageId);
       } else if (data == 'back_lesson') {
-        await this.openLibrary(chatId, callbackQuery.message.message_id);
+        await this.openLibrary(chatId, messageId);
       } else if (data.startsWith('default_page_')) {
-        await this.openLessonList(chatId, data, callbackQuery.message.message_id, 0);
+        await this.openLessonList(chatId, data, messageId, 0);
       } else if (data.startsWith('extended_page_')) {
-        await this.openLessonList(chatId, data, callbackQuery.message.message_id, 1);
+        await this.openLessonList(chatId, data, messageId, 1);
       } else if (data.startsWith('lesson_')) {
-        await this.processLessonSelection(chatId, data, callbackQuery.message.message_id);
+        await this.processLessonSelection(chatId, data, messageId);
       } else if (data == 'add_wallet') {
         await this.addWallet(chatId, callbackQuery.id);
+      } else if (data == 'ref_statistic') {
+        await this.openStatisticRefs(chatId, messageId);
+      } else if (data == 'point_statistic') {
+        await this.openStatisticPoints(chatId, messageId);
+      } else if (data == 'back_statistic') {
+        await this.openStatistics(chatId, messageId);
       }
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
@@ -150,26 +157,80 @@ class UserHandler {
     this.userState[chatId] = 'broadcast';
   }
 
-  async openStatistics(chatId) {
+  async openStatistics(chatId, messageId = null) {
     try {
-      const topUsers = await this.userRepository.getTopUsers(chatId);
-
-      let message = '🏆 <b>Активные пользователи:</b>\n\n';
-
-      topUsers.slice(0, 10).forEach(user => {
-        message += `${user.place}. ${user.name}: ${user.total_points}★\n`;
-      });
-
-      const specificUser = topUsers.find(user => user.user_id == chatId);
-
-      if (specificUser?.place > 10) {
-        message += `\nВаше место: ${specificUser.place}\nОчки: ${specificUser.total_points}★`;
+      const text = 'Какая статистика вам нужна?';
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: 'Рефоводы', callback_data: 'ref_statistic' }, { text: 'Очки', callback_data: 'point_statistic' }]
+        ]
       }
 
-      await this.bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+      if (messageId) {
+        await this.bot.editMessageText(text, {
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: keyboard,
+          parse_mode: 'HTML'
+        });
+      } else {
+        await this.bot.sendMessage(chatId, text, {
+          reply_markup: keyboard,
+          parse_mode: 'HTML'
+        });
+      }
     } catch (error) {
       console.error('Ошибка при открытии статистики:', error);
     }
+  }
+
+  async openStatisticsList(chatId, messageId, text, getData) {
+    try {
+      const topUsers = await getData(chatId);
+  
+      let message = `${text}\n\n`;
+  
+      topUsers.slice(0, 10).forEach(user => {
+        const points = user.total_points ?? user.referral_count;
+        message += `${user.place}. ${user.name}: ${points}★\n`;
+      });
+  
+      const specificUser = topUsers.find(user => user.user_id == chatId);
+  
+      if (specificUser?.place > 10) {
+        const points = specificUser.total_points ?? specificUser.referral_count;
+        message += `\nВаше место: ${specificUser.place}\nОчки: ${points}★`;
+      }
+  
+      await this.bot.editMessageText(message, { 
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: 'Назад', callback_data: 'back_statistic' }]
+          ]
+        },
+        parse_mode: 'HTML' 
+      });
+    } catch (error) {
+      ErrorHandler.handleError(error, chatId, this.bot);
+    }
+  }  
+
+  async openStatisticRefs(chatId, messageId) {
+    await this.openStatisticsList(
+      chatId, messageId, 
+      '🏆 <b>Активные рефоводы:</b>', 
+      this.userRepository.getTopUsersByRefs.bind(this.userRepository)
+    );
+  }
+  
+  async openStatisticPoints(chatId, messageId) {
+    await this.openStatisticsList(
+      chatId, messageId, 
+      '🏆 <b>Активные пользователи:</b>', 
+      this.userRepository.getTopUsers.bind(this.userRepository)
+    )
   }
 
   async openLibrary(chatId, messageId = null) {
