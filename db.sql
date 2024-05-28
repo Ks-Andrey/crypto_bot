@@ -304,7 +304,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION get_all_lessons()
  RETURNS SETOF Lessons AS $$
 BEGIN
@@ -314,7 +313,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION get_user_lessons(
     p_type_id INTEGER
 )
@@ -327,11 +325,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 CREATE OR REPLACE FUNCTION get_top_users(
     input_user_id NUMERIC
 )
 RETURNS TABLE (
-    place INTEGER,
+    place BIGINT,
     user_id NUMERIC,
     name VARCHAR(255),
     total_points INTEGER
@@ -346,35 +345,23 @@ BEGIN
         SELECT 
             Users.id,
             Users.name,
-            (ref_points + lesson_points + task_points)::INTEGER AS total_points
+            (Users.ref_points + Users.lesson_points + Users.task_points)::INTEGER AS total_points
         FROM Users
     ),
-    TopUsers AS (
+    RankedUsers AS (
         SELECT 
-            UserPoints.id,
+            ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place,
+            UserPoints.id AS user_id,
             UserPoints.name,
-            UserPoints.total_points,
-            ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place
+            UserPoints.total_points
         FROM UserPoints
         ORDER BY UserPoints.total_points DESC
-        LIMIT LEAST(10, total_users)
     ),
-    SpecificUser AS (
-        SELECT 
-            UserPoints.id,
-            UserPoints.name,
-            UserPoints.total_points,
-            ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place
-        FROM UserPoints
-        WHERE id = input_user_id
-    )
-    SELECT DISTINCT ON (COALESCE(TopUsers.place, SpecificUser.place))
-        COALESCE(TopUsers.place, SpecificUser.place)::INTEGER AS place,
-        COALESCE(TopUsers.id, SpecificUser.id) AS user_id,
-        COALESCE(TopUsers.name, SpecificUser.name) AS name,
-        COALESCE(TopUsers.total_points, SpecificUser.total_points) AS total_points
-    FROM TopUsers
-    FULL JOIN SpecificUser ON TopUsers.place = SpecificUser.place;
+    TopUsers AS ( SELECT * FROM RankedUsers LIMIT LEAST(10, total_users) )
+    SELECT * FROM TopUsers
+    UNION ALL
+    SELECT * FROM RankedUsers WHERE RankedUsers.user_id = input_user_id
+    AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -542,7 +529,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION get_completed_tasks(
     p_user_id NUMERIC
 ) RETURNS TABLE (
@@ -568,7 +554,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION get_user_tasks(
     p_user_id NUMERIC
 ) RETURNS TABLE(
@@ -592,7 +577,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION get_all_tasks()
 RETURNS SETOF TASKS AS $$
 BEGIN
@@ -816,7 +800,6 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 DROP FUNCTION get_all_lists;
 CREATE OR REPLACE FUNCTION get_all_lists(p_user_id NUMERIC DEFAULT NULL)
 RETURNS SETOF USER_LISTS AS $$

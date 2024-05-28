@@ -156,13 +156,13 @@ class UserHandler {
 
       let message = '🏆 <b>Активные пользователи:</b>\n\n';
 
-      topUsers.forEach(user => {
+      topUsers.slice(0, 10).forEach(user => {
         message += `${user.place}. ${user.name}: ${user.total_points}★\n`;
       });
 
       const specificUser = topUsers.find(user => user.user_id == chatId);
 
-      if (specificUser.place > 10) {
+      if (specificUser?.place > 10) {
         message += `\nВаше место: ${specificUser.place}\nОчки: ${specificUser.total_points}★`;
       }
 
