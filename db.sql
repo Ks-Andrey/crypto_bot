@@ -19,6 +19,7 @@ drop view USERS_LIST;
 ALTER TABLE Users
 ADD CONSTRAINT unique_wallet UNIQUE (wallet);
 
+--изменено
 drop function get_all_users;
 CREATE OR REPLACE FUNCTION get_all_users()
 RETURNS SETOF USERS AS $$
@@ -129,6 +130,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 CREATE OR REPLACE FUNCTION get_top_users(
     input_user_id NUMERIC = NULL,
     input_admin_id NUMERIC = NULL
@@ -157,6 +159,8 @@ BEGIN
                 UserPoints.name,
                 UserPoints.total_points
             FROM UserPoints
+            ORDER BY total_points DESC
+            LIMIT 10
         )
         SELECT * FROM RankedUsers;
     ELSE
@@ -187,6 +191,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 CREATE OR REPLACE FUNCTION get_top_users_by_refs(
     input_user_id NUMERIC = NULL,
     input_admin_id NUMERIC = NULL
@@ -201,20 +206,21 @@ BEGIN
     IF input_user_id IS NULL THEN
         RETURN QUERY
         SELECT 
-            ROW_NUMBER() OVER(ORDER BY (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL) DESC) AS place,
+            ROW_NUMBER() OVER(ORDER BY (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL AND ref_users.wallet <> '') DESC) AS place,
             users.id AS user_id, 
             users.name, 
-            (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL) AS referral_count 
+            (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL AND ref_users.wallet <> '') AS referral_count 
         FROM users
         WHERE users.id <> input_admin_id
-        ORDER BY referral_count DESC;
+        ORDER BY referral_count DESC
+        LIMIT 10;
     ELSE
         RETURN QUERY
         WITH UserRefs AS (
             SELECT
                 users.id as user_id, 
                 users.name, 
-                (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL) AS referral_count 
+                (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL AND ref_users.wallet <> '') AS referral_count 
             FROM users
             WHERE users.id <> input_admin_id
         ), RankedUsers AS (
@@ -811,6 +817,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 DROP FUNCTION add_user_to_list;
 CREATE OR REPLACE FUNCTION add_user_to_list(p_list_id INTEGER, p_user_id NUMERIC)
 RETURNS BOOLEAN AS $$
@@ -819,18 +826,57 @@ BEGIN
         RAISE EXCEPTION 'List ID and User ID cannot be NULL';
     END IF;
 
+    IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = p_user_id) THEN
+        RAISE EXCEPTION 'User ID % does not exist', p_user_id;
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
         RAISE EXCEPTION 'List ID % does not exist', p_list_id;
     END IF;
 
     INSERT INTO USER_LIST_DATA (list_id, user_id) VALUES (p_list_id, p_user_id);
     RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+--новое
+CREATE OR REPLACE FUNCTION add_users_to_list(
+    p_list_id INTEGER,
+    p_user_list NUMERIC[]
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    link_user_id NUMERIC;
+BEGIN
+    IF p_list_id IS NULL THEN 
+        RAISE EXCEPTION 'List ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
+        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
+    END IF;
+
+    FOREACH link_user_id IN ARRAY p_user_list LOOP
+        IF link_user_id IS NULL THEN
+            RAISE EXCEPTION 'User ID cannot be NULL';
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = link_user_id) THEN
+            RAISE EXCEPTION 'User ID % does not exist', link_user_id;
+        END IF;
+
+        INSERT INTO USER_LIST_DATA (list_id, user_id) VALUES (p_list_id, link_user_id);
+    END LOOP;
+
+    RETURN TRUE;
 EXCEPTION
     WHEN OTHERS THEN
+        RAISE NOTICE 'An error occurred: %', SQLERRM;
         RETURN FALSE;
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 DROP FUNCTION delete_user_from_list;
 CREATE OR REPLACE FUNCTION delete_user_from_list(p_list_id INTEGER, p_user_id NUMERIC)
 RETURNS BOOLEAN AS $$
@@ -845,9 +891,6 @@ BEGIN
 
     DELETE FROM USER_LIST_DATA WHERE list_id = p_list_id AND user_id = p_user_id;
     RETURN TRUE;
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN FALSE;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -866,6 +909,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 DROP FUNCTION delete_list;
 CREATE OR REPLACE FUNCTION delete_list(p_list_id INTEGER)
 RETURNS BOOLEAN AS $$
@@ -882,9 +926,6 @@ BEGIN
     DELETE FROM USER_LISTS WHERE ID = p_list_id;
 
     RETURN TRUE;
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN FALSE;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -972,6 +1013,7 @@ $$ LANGUAGE plpgsql;
 ALTER TABLE USER_LISTS
 ADD CONSTRAINT unique_list_name UNIQUE (name);
 
+--изменено
 CREATE OR REPLACE FUNCTION delete_full_task(p_task_id INTEGER)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -984,16 +1026,13 @@ BEGIN
     END IF;
 
     DELETE FROM CONFIRM_TASKS WHERE task_id = p_task_id;
-
     DELETE FROM TASKS WHERE id = p_task_id;
 
     RETURN TRUE;
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN FALSE;
 END;
 $$ LANGUAGE plpgsql;
 
+--изменено
 CREATE OR REPLACE FUNCTION delete_full_lesson(p_lesson_id INTEGER)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -1010,9 +1049,6 @@ BEGIN
     DELETE FROM Lessons WHERE id = p_lesson_id;
 
     RETURN TRUE;
-EXCEPTION
-    WHEN OTHERS THEN
-        RETURN FALSE;
 END;
 $$ LANGUAGE plpgsql;
 

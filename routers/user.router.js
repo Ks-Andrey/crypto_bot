@@ -22,6 +22,7 @@ router.post('/list/:id/add', userController.addUserToList.bind(userController));
 router.post('/list/:id/delete', userController.deleteUserFromList.bind(userController));
 router.get('/list/:id', userController.getUsersFromList.bind(userController));
 router.post('/list/:id/broadcast', userController.broadcastMessage.bind(userController));
+router.post('/list/:id/add_list', userController.addUsersToList.bind(userController));
 
 router.get('/statistics', userController.getAllStatistics.bind(userController));
 

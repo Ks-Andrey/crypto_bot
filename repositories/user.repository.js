@@ -96,18 +96,18 @@ class UserRepository {
         }
     }
     
-    async getTopUsers(userId = null) {
+    async getTopUsers(userId = null, adminId = this.adminId) {
         try {
-            const result = await this.client.query('SELECT * FROM get_top_users($1, $2)', [userId, this.adminId]);
+            const result = await this.client.query('SELECT * FROM get_top_users($1, $2)', [userId, adminId]);
             return result.rows;
         } catch (error) {
             throw error;
         }
     }
 
-    async getTopUsersByRefs(userId = null) {
+    async getTopUsersByRefs(userId = null, adminId = this.adminId) {
         try {
-            const result = await this.client.query('SELECT * FROM get_top_users_by_refs($1, $2)', [userId, this.adminId]);
+            const result = await this.client.query('SELECT * FROM get_top_users_by_refs($1, $2)', [userId, adminId]);
             return result.rows;
         } catch (error) {
             throw error;
@@ -136,6 +136,15 @@ class UserRepository {
         try {
             const result = await this.client.query('SELECT add_user_to_list($1, $2)', [listId, userId]);
             return result.rows[0].add_user_to_list;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async addUsersToList(listId, userIds) {
+        try {
+            const result = await this.client.query('SELECT add_users_to_list($1, $2::NUMERIC[])', [listId, userIds]);
+            return result.rows[0].add_users_to_list;
         } catch (error) {
             throw error;
         }

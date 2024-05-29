@@ -107,6 +107,18 @@ class UserController {
         }
     }
 
+    async addUsersToList(req, res) {
+        const { userIds } = req.body;
+        const listId = req.params.id;
+
+        try {
+            const isAdd = await this.adminRepository.addUsersToList(listId, userIds);
+            res.json({ status: isAdd })
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
     async deleteUserFromList(req, res) {
         const { userId } = req.body;
         const listId = req.params.id;
@@ -165,7 +177,9 @@ class UserController {
     async getAllStatistics(req, res) {
         try {
             const statistics = await this.adminRepository.getAllStatistics();
-            res.json({ statistics });
+            const topRefs = await this.adminRepository.getTopUsersByRefs(null);
+            const topUsers = await this.adminRepository.getTopUsers(null);
+            res.json({ statistics, topRefs, topUsers });
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
