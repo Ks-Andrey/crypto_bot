@@ -1,7 +1,7 @@
 const { Client } = require('pg');
 
 class UserRepository {
-    constructor(user, host, database, password) {
+    constructor(user, host, database, password, adminId) {
         this.client = new Client({
             user,
             host,
@@ -11,6 +11,8 @@ class UserRepository {
             client_encoding: 'UTF8'
         });
         this.client.connect();
+
+        this.adminId = adminId
     }
 
     async getAllUsers() {
@@ -96,7 +98,7 @@ class UserRepository {
     
     async getTopUsers(userId = null) {
         try {
-            const result = await this.client.query('SELECT * FROM get_top_users($1)', [userId]);
+            const result = await this.client.query('SELECT * FROM get_top_users($1, $2)', [userId, this.adminId]);
             return result.rows;
         } catch (error) {
             throw error;
@@ -105,7 +107,7 @@ class UserRepository {
 
     async getTopUsersByRefs(userId = null) {
         try {
-            const result = await this.client.query('SELECT * FROM get_top_users_by_refs($1)', [userId]);
+            const result = await this.client.query('SELECT * FROM get_top_users_by_refs($1, $2)', [userId, this.adminId]);
             return result.rows;
         } catch (error) {
             throw error;
@@ -168,7 +170,7 @@ class UserRepository {
 
     async getAllStatistics() {
         try {
-            const result = await this.client.query('SELECT * FROM get_all_statistics()');
+            const result = await this.client.query('SELECT * FROM get_all_statistics($1)', [this.adminId]);
             return result.rows;
         } catch (error) {
             throw error;

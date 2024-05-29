@@ -10,7 +10,8 @@ CREATE TABLE Users (
     ref_id NUMERIC DEFAULT 0,
     ref_points INTEGER DEFAULT 0 NOT NULL,
     lesson_points INTEGER DEFAULT 0 NOT NULL,
-    task_points INTEGER DEFAULT 0 NOT NULL
+    task_points INTEGER DEFAULT 0 NOT NULL,
+    reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 drop view USERS_LIST;
@@ -18,7 +19,6 @@ drop view USERS_LIST;
 ALTER TABLE Users
 ADD CONSTRAINT unique_wallet UNIQUE (wallet);
 
---изменено
 drop function get_all_users;
 CREATE OR REPLACE FUNCTION get_all_users()
 RETURNS SETOF USERS AS $$
@@ -126,6 +126,136 @@ CREATE OR REPLACE FUNCTION get_wallets()
 RETURNS TABLE(wallet VARCHAR(255)) AS $$
 BEGIN
     RETURN QUERY SELECT USERS.wallet FROM Users WHERE Users.wallet IS NOT NULL AND Users.wallet != '';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_top_users(
+    input_user_id NUMERIC = NULL,
+    input_admin_id NUMERIC = NULL
+)
+RETURNS TABLE (
+    place BIGINT,
+    user_id NUMERIC,
+    name VARCHAR(255),
+    total_points INTEGER
+) AS $$
+BEGIN
+    IF input_user_id IS NULL THEN
+        RETURN QUERY
+        WITH UserPoints AS (
+            SELECT 
+                Users.id,
+                Users.name,
+                (Users.ref_points + Users.lesson_points + Users.task_points)::INTEGER AS total_points
+            FROM Users
+            WHERE Users.id <> input_admin_id
+        ),
+        RankedUsers AS (
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place,
+                UserPoints.id AS user_id,
+                UserPoints.name,
+                UserPoints.total_points
+            FROM UserPoints
+        )
+        SELECT * FROM RankedUsers;
+    ELSE
+        RETURN QUERY
+        WITH UserPoints AS (
+            SELECT 
+                Users.id,
+                Users.name,
+                (Users.ref_points + Users.lesson_points + Users.task_points)::INTEGER AS total_points
+            FROM Users
+            WHERE Users.id <> input_admin_id
+        ),
+        RankedUsers AS (
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place,
+                UserPoints.id AS user_id,
+                UserPoints.name,
+                UserPoints.total_points
+            FROM UserPoints
+            ORDER BY UserPoints.total_points DESC
+        ),
+        TopUsers AS ( SELECT * FROM RankedUsers LIMIT 10 )
+        SELECT * FROM TopUsers
+        UNION ALL
+        SELECT * FROM RankedUsers WHERE RankedUsers.user_id = input_user_id
+        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_top_users_by_refs(
+    input_user_id NUMERIC = NULL,
+    input_admin_id NUMERIC = NULL
+)
+RETURNS TABLE (
+    place BIGINT,
+    user_id NUMERIC,
+    name VARCHAR(255),
+    referral_count BIGINT 
+) AS $$
+BEGIN
+    IF input_user_id IS NULL THEN
+        RETURN QUERY
+        SELECT 
+            ROW_NUMBER() OVER(ORDER BY (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL) DESC) AS place,
+            users.id AS user_id, 
+            users.name, 
+            (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL) AS referral_count 
+        FROM users
+        WHERE users.id <> input_admin_id
+        ORDER BY referral_count DESC;
+    ELSE
+        RETURN QUERY
+        WITH UserRefs AS (
+            SELECT
+                users.id as user_id, 
+                users.name, 
+                (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id AND ref_users.wallet IS NOT NULL) AS referral_count 
+            FROM users
+            WHERE users.id <> input_admin_id
+        ), RankedUsers AS (
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY UserRefs.referral_count DESC) AS place, 
+                *
+            FROM UserRefs
+        ), TopUsers AS (
+            SELECT * 
+            FROM RankedUsers 
+            ORDER BY RankedUsers.place 
+            LIMIT 10
+        )
+        SELECT * FROM TopUsers
+        UNION ALL
+        SELECT * FROM RankedUsers 
+        WHERE RankedUsers.user_id = input_user_id
+        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM get_top_users_by_refs(468407757);
+select * from get_top_users(6451534002);
+
+CREATE OR REPLACE FUNCTION get_all_statistics(
+    input_admin_id NUMERIC
+)
+RETURNS TABLE (
+    name TEXT,
+    data BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 'users count' AS name, count(*) from Users
+    UNION
+    SELECT 'referrals count' AS name, count(*) FROM Users WHERE Users.ref_id IS NOT NULL AND Users.ref_id <> input_admin_id
+    UNION 
+    SELECT 'lesson comlite count' AS name, count(*) FROM CONFIRM_LESSONS
+    UNION 
+    SELECT 'tasks complite count' AS name, count(*) FROM CONFIRM_TASKS;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -325,49 +455,6 @@ BEGIN
     ORDER BY ID ASC;
 END;
 $$ LANGUAGE plpgsql;
-
---старое
-CREATE OR REPLACE FUNCTION get_top_users(
-    input_user_id NUMERIC
-)
-RETURNS TABLE (
-    place BIGINT,
-    user_id NUMERIC,
-    name VARCHAR(255),
-    total_points INTEGER
-) AS $$
-DECLARE
-    total_users INTEGER;
-BEGIN
-    SELECT COUNT(DISTINCT id) INTO total_users FROM Users;
-
-    RETURN QUERY
-    WITH UserPoints AS (
-        SELECT 
-            Users.id,
-            Users.name,
-            (Users.ref_points + Users.lesson_points + Users.task_points)::INTEGER AS total_points
-        FROM Users
-    ),
-    RankedUsers AS (
-        SELECT 
-            ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place,
-            UserPoints.id AS user_id,
-            UserPoints.name,
-            UserPoints.total_points
-        FROM UserPoints
-        ORDER BY UserPoints.total_points DESC
-    ),
-    TopUsers AS ( SELECT * FROM RankedUsers LIMIT LEAST(10, total_users) )
-    SELECT * FROM TopUsers
-    UNION ALL
-    SELECT * FROM RankedUsers WHERE RankedUsers.user_id = input_user_id
-    AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
-END;
-$$ LANGUAGE plpgsql;
-
-
-select * from get_top_users(468407757);
 
 CREATE TABLE ADMINS (
     id SERIAL PRIMARY KEY,
@@ -934,144 +1021,3 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE CONFIRM_TASKS TO crypto_admin;
 
 GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE Lessons TO crypto_admin;
 GRANT SELECT, INSERT, DELETE ON TABLE CONFIRM_LESSONS TO crypto_admin;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-CREATE OR REPLACE FUNCTION get_top_users(
-    input_user_id NUMERIC = NULL
-)
-RETURNS TABLE (
-    place BIGINT,
-    user_id NUMERIC,
-    name VARCHAR(255),
-    total_points INTEGER
-) AS $$
-BEGIN
-    IF input_user_id IS NULL THEN
-        RETURN QUERY
-        WITH UserPoints AS (
-            SELECT 
-                Users.id,
-                Users.name,
-                (Users.ref_points + Users.lesson_points + Users.task_points)::INTEGER AS total_points
-            FROM Users
-        ),
-        RankedUsers AS (
-            SELECT 
-                ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place,
-                UserPoints.id AS user_id,
-                UserPoints.name,
-                UserPoints.total_points
-            FROM UserPoints
-        )
-        SELECT * FROM RankedUsers;
-    ELSE
-        RETURN QUERY
-        WITH UserPoints AS (
-            SELECT 
-                Users.id,
-                Users.name,
-                (Users.ref_points + Users.lesson_points + Users.task_points)::INTEGER AS total_points
-            FROM Users
-        ),
-        RankedUsers AS (
-            SELECT 
-                ROW_NUMBER() OVER (ORDER BY UserPoints.total_points DESC) AS place,
-                UserPoints.id AS user_id,
-                UserPoints.name,
-                UserPoints.total_points
-            FROM UserPoints
-            ORDER BY UserPoints.total_points DESC
-        ),
-        TopUsers AS ( SELECT * FROM RankedUsers LIMIT 10 )
-        SELECT * FROM TopUsers
-        UNION ALL
-        SELECT * FROM RankedUsers WHERE RankedUsers.user_id = input_user_id
-        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
-    END IF;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION get_top_users_by_refs(
-    input_user_id NUMERIC = NULL
-)
-RETURNS TABLE (
-    place BIGINT,
-    user_id NUMERIC,
-    name VARCHAR(255),
-    referral_count BIGINT 
-) AS $$
-BEGIN
-    IF input_user_id IS NULL THEN
-        RETURN QUERY
-        SELECT 
-            ROW_NUMBER() OVER(ORDER BY (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id) DESC) AS place,
-            users.id AS user_id, 
-            users.name, 
-            (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id) AS referral_count 
-        FROM users
-        ORDER BY referral_count DESC;
-    ELSE
-        RETURN QUERY
-        WITH UserRefs AS (
-            SELECT
-                users.id as user_id, 
-                users.name, 
-                (SELECT COUNT(*) FROM users AS ref_users WHERE ref_users.ref_id = users.id) AS referral_count 
-            FROM users
-        ), RankedUsers AS (
-            SELECT
-                ROW_NUMBER() OVER (ORDER BY UserRefs.referral_count DESC) AS place, 
-                *
-            FROM UserRefs
-        ), TopUsers AS (
-            SELECT * 
-            FROM RankedUsers 
-            ORDER BY RankedUsers.place 
-            LIMIT 10
-        )
-        SELECT * FROM TopUsers
-        UNION ALL
-        SELECT * FROM RankedUsers 
-        WHERE RankedUsers.user_id = input_user_id
-        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
-    END IF;
-END;
-$$ LANGUAGE plpgsql;
-
-SELECT * FROM get_top_users_by_refs(468407757);
-
-select * from get_top_users(6451534002);
-
-
-CREATE OR REPLACE FUNCTION get_all_statistics()
-RETURNS TABLE (
-    name TEXT,
-    data BIGINT
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 'users count' AS name, count(*) from Users
-    UNION
-    SELECT 'referrals count' AS name, count(*) FROM Users WHERE Users.ref_id IS NOT NULL AND Users.ref_id <> 468407757
-    UNION 
-    SELECT 'lesson comlite count' AS name, count(*) FROM CONFIRM_LESSONS
-    UNION 
-    SELECT 'tasks complite count' AS name, count(*) FROM CONFIRM_TASKS;
-END;
-$$ LANGUAGE plpgsql;
-
-ALTER TABLE Users
-ADD COLUMN reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;

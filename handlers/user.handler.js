@@ -1,6 +1,6 @@
 require('dotenv').config();
 const TonWeb = require("tonweb");
-const { tasksKeyboard, authKeyboard, adminKeyboard, commands, lessonsKeyboard } = require('../utils/keyboards');
+const { authKeyboard, adminKeyboard, commands, lessonsKeyboard } = require('../utils/keyboards');
 const ErrorHandler = require('../utils/error.handler');
 
 class UserHandler {
@@ -159,10 +159,10 @@ class UserHandler {
 
   async openStatistics(chatId, messageId = null) {
     try {
-      const text = 'Какая статистика вам нужна?';
+      const text = 'Какой рейтинг интересует?';
       const keyboard = {
         inline_keyboard: [
-          [{ text: 'Рефоводы', callback_data: 'ref_statistic' }, { text: 'Очки', callback_data: 'point_statistic' }]
+          [{ text: 'Рефоводы', callback_data: 'ref_statistic' }, { text: 'Общий', callback_data: 'point_statistic' }]
         ]
       }
 
