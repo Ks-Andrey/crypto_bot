@@ -25,5 +25,7 @@ router.post('/list/:id/broadcast', userController.broadcastMessage.bind(userCont
 router.post('/list/:id/add_list', userController.addUsersToList.bind(userController));
 
 router.get('/statistics', userController.getAllStatistics.bind(userController));
+router.post('/statistics/points', userController.getTopUsersByPoints.bind(userController));
+router.post('/statistics/refs', userController.getTopUsersByRefs.bind(userController));
 
 module.exports = router;

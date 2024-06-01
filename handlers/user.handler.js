@@ -328,8 +328,12 @@ class UserHandler {
             resize_keyboard: true
           }
         });
+
+        await this.bot.deleteMessage(chatId, messageId);
       } else {
-        await this.bot.sendMessage(chatId, lesson[0].text, {
+        await this.bot.editMessageText(lesson[0].text, {
+          chat_id: chatId,
+          message_id: messageId,
           parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [
@@ -339,9 +343,6 @@ class UserHandler {
           }
         });
       }
-
-      await this.bot.deleteMessage(chatId, messageId);
-
     } catch (error) {
       ErrorHandler.handleError(error, chatId, this.bot);
     }
@@ -410,11 +411,20 @@ class UserHandler {
       const totalPages = Math.ceil(elementsCount / limit); 
 
       if (elements.length === 0) {
-        this.bot.editMessageText(emptyMessage, {
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: backButtonData }]] }
-        });
+        if (messageId) {
+          if (backButtonData) {
+            this.bot.editMessageText(emptyMessage, {
+              chat_id: chatId,
+              message_id: messageId,
+              reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: backButtonData }]] }
+            });
+          } else {
+            this.bot.sendMessage(chatId, emptyMessage);
+            this.bot.deleteMessage(chatId, messageId);
+          }
+        }else{
+          this.bot.sendMessage(chatId, emptyMessage);
+        }
         return;
       }
 

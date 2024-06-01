@@ -14,12 +14,56 @@ CREATE TABLE Users (
     reg_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-drop view USERS_LIST;
+CREATE TABLE Lessons (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    text TEXT NOT NULL,
+    type_id INTEGER NOT NULL DEFAULT 0,
+    photo_path VARCHAR(255),
+    is_deleted BOOLEAN DEFAULT FALSE,
+    points INTEGER
+);
 
-ALTER TABLE Users
-ADD CONSTRAINT unique_wallet UNIQUE (wallet);
+CREATE TABLE CONFIRM_LESSONS (
+    id SERIAL PRIMARY KEY,
+    lesson_id INTEGER FOREIGN KEY REFERENCES Lessons(id),
+    user_id NUMERIC FOREIGN KEY REFERENCES Users(id),
+    confirm_date DATE DEFAULT CURRENT_DATE
+);
 
---изменено
+CREATE TABLE ADMINS (
+    id SERIAL PRIMARY KEY,
+    login VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE TASKS (
+    ID SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    text TEXT NOT NULL,
+    points INTEGER NOT NULL DEFAULT 1,
+    is_deleted BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE CONFIRM_TASKS (
+    ID SERIAL PRIMARY KEY,
+    TASK_ID INTEGER NOT NULL FOREIGN KEY TASKS(ID),
+    USER_ID NUMERIC NOT NULL FOREIGN KEY USERS(ID),
+    confirm_date DATE DEFAULT CURRENT_DATE
+);
+
+CREATE TABLE USER_LISTS (
+    ID SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL
+);
+
+CREATE TABLE USER_LIST_DATA (
+    ID SERIAL PRIMARY KEY,
+    list_id INTEGER NOT NULL,
+    user_id NUMERIC NOT NULL,
+    FOREIGN KEY (list_id) REFERENCES USER_LISTS(ID)
+);
+
 drop function get_all_users;
 CREATE OR REPLACE FUNCTION get_all_users()
 RETURNS SETOF USERS AS $$
@@ -126,11 +170,10 @@ drop function get_wallets;
 CREATE OR REPLACE FUNCTION get_wallets()
 RETURNS TABLE(wallet VARCHAR(255)) AS $$
 BEGIN
-    RETURN QUERY SELECT USERS.wallet FROM Users WHERE Users.wallet IS NOT NULL AND Users.wallet != '';
+    RETURN QUERY SELECT USERS.wallet FROM Users WHERE Users.wallet IS NOT NULL AND Users.wallet != '' ORDER BY USERS.id DESC;
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION get_top_users(
     input_user_id NUMERIC = NULL,
     input_admin_id NUMERIC = NULL
@@ -191,7 +234,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
 CREATE OR REPLACE FUNCTION get_top_users_by_refs(
     input_user_id NUMERIC = NULL,
     input_admin_id NUMERIC = NULL
@@ -246,41 +288,28 @@ $$ LANGUAGE plpgsql;
 SELECT * FROM get_top_users_by_refs(468407757);
 select * from get_top_users(6451534002);
 
+--изменено
 CREATE OR REPLACE FUNCTION get_all_statistics(
     input_admin_id NUMERIC
 )
 RETURNS TABLE (
-    name TEXT,
+    id INTEGER,
     data BIGINT
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 'users count' AS name, count(*) from Users
-    UNION
-    SELECT 'referrals count' AS name, count(*) FROM Users WHERE Users.ref_id IS NOT NULL AND Users.ref_id <> input_admin_id
-    UNION 
-    SELECT 'lesson comlite count' AS name, count(*) FROM CONFIRM_LESSONS
-    UNION 
-    SELECT 'tasks complite count' AS name, count(*) FROM CONFIRM_TASKS;
+    SELECT * FROM (
+        SELECT 2 AS id, count(*) AS data FROM Users WHERE Users.id <> input_admin_id
+        UNION ALL
+        SELECT 1 AS id, count(*) AS data FROM Users WHERE Users.ref_id IS NOT NULL AND Users.ref_id <> input_admin_id
+        UNION ALL
+        SELECT 4 AS id, count(*) AS data FROM CONFIRM_LESSONS WHERE CONFIRM_LESSONS.user_id <> input_admin_id
+        UNION ALL
+        SELECT 3 AS id, count(*) AS data FROM CONFIRM_TASKS WHERE CONFIRM_TASKS.user_id <> input_admin_id
+    ) AS statistics
+    ORDER BY id ASC;
 END;
 $$ LANGUAGE plpgsql;
-
-
-CREATE TABLE Lessons (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    text TEXT NOT NULL,
-    type_id INTEGER NOT NULL DEFAULT 0,
-    photo_path VARCHAR(255),
-    is_deleted BOOLEAN DEFAULT FALSE,
-    points INTEGER
-);
-
-CREATE TABLE CONFIRM_LESSONS (
-    id SERIAL PRIMARY KEY,
-    lesson_id INTEGER FOREIGN KEY REFERENCES Lessons(id),
-    user_id NUMERIC FOREIGN KEY REFERENCES Users(id)
-);
 
 CREATE OR REPLACE FUNCTION accept_lesson(
     p_user_id NUMERIC,
@@ -462,12 +491,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TABLE ADMINS (
-    id SERIAL PRIMARY KEY,
-    login VARCHAR(100) UNIQUE NOT NULL,
-    password VARCHAR(100) NOT NULL
-);
-
 INSERT INTO ADMINS(login, password) VALUES ('andrey_ksa', '123123');
 
 CREATE OR REPLACE FUNCTION auth_admin(
@@ -487,21 +510,6 @@ BEGIN
     RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql;
-
-
-CREATE TABLE TASKS (
-    ID SERIAL PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
-    text TEXT NOT NULL,
-    points INTEGER NOT NULL DEFAULT 1,
-    is_deleted BOOLEAN DEFAULT FALSE
-);
-
-CREATE TABLE CONFIRM_TASKS (
-    ID SERIAL PRIMARY KEY,
-    TASK_ID INTEGER NOT NULL FOREIGN KEY TASKS(ID),
-    USER_ID NUMERIC NOT NULL FOREIGN KEY USERS(ID)
-);
 
 CREATE OR REPLACE FUNCTION add_task(
     p_name VARCHAR,
@@ -709,25 +717,244 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION add_points_to_referrer()
-RETURNS TRIGGER AS $$
+DROP FUNCTION add_list;
+CREATE OR REPLACE FUNCTION add_list(p_name VARCHAR)
+RETURNS INTEGER AS $$
+DECLARE
+    new_list_id INTEGER;
 BEGIN
-    IF NEW.wallet IS NOT NULL AND NEW.wallet <> '' AND (OLD.wallet IS NULL OR OLD.wallet = '') THEN
-        IF NEW.ref_id IS NOT NULL AND NEW.ref_id <> 0 THEN
-            UPDATE Users
-            SET ref_points = ref_points + 500
-            WHERE id = NEW.ref_id;
-        END IF;
+    IF p_name IS NULL OR LENGTH(TRIM(p_name)) = 0 THEN
+        RAISE EXCEPTION 'List name cannot be empty';
     END IF;
-    RETURN NEW;
+
+    IF EXISTS (SELECT 1 FROM USER_LISTS WHERE name = p_name) THEN
+        RAISE EXCEPTION 'Task with name % already exists', p_name;
+    END IF;
+
+    INSERT INTO USER_LISTS (name) VALUES (p_name) RETURNING ID INTO new_list_id;
+    RETURN new_list_id;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER wallet_set_trigger
-AFTER UPDATE OF wallet
-ON Users
-FOR EACH ROW
-EXECUTE FUNCTION add_points_to_referrer();
+DROP FUNCTION add_user_to_list;
+CREATE OR REPLACE FUNCTION add_user_to_list(p_list_id INTEGER, p_user_id NUMERIC)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_list_id IS NULL OR p_user_id IS NULL THEN
+        RAISE EXCEPTION 'List ID and User ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = p_user_id) THEN
+        RAISE EXCEPTION 'User ID % does not exist', p_user_id;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
+        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
+    END IF;
+
+    INSERT INTO USER_LIST_DATA (list_id, user_id) VALUES (p_list_id, p_user_id);
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION add_users_to_list(
+    p_list_id INTEGER,
+    p_user_list NUMERIC[]
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    link_user_id NUMERIC;
+BEGIN
+    IF p_list_id IS NULL THEN 
+        RAISE EXCEPTION 'List ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
+        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
+    END IF;
+
+    FOREACH link_user_id IN ARRAY p_user_list LOOP
+        IF link_user_id IS NULL THEN
+            RAISE EXCEPTION 'User ID cannot be NULL';
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = link_user_id) THEN
+            RAISE EXCEPTION 'User ID % does not exist', link_user_id;
+        END IF;
+
+        INSERT INTO USER_LIST_DATA (list_id, user_id) VALUES (p_list_id, link_user_id);
+    END LOOP;
+
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'An error occurred: %', SQLERRM;
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION delete_user_from_list;
+CREATE OR REPLACE FUNCTION delete_user_from_list(p_list_id INTEGER, p_user_id NUMERIC)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_list_id IS NULL OR p_user_id IS NULL THEN
+        RAISE EXCEPTION 'List ID and User ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LIST_DATA WHERE list_id = p_list_id AND user_id = p_user_id) THEN
+        RAISE EXCEPTION 'User ID % not found in List ID %', p_user_id, p_list_id;
+    END IF;
+
+    DELETE FROM USER_LIST_DATA WHERE list_id = p_list_id AND user_id = p_user_id;
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION get_users_from_list;
+CREATE OR REPLACE FUNCTION get_users_from_list(p_list_id INTEGER)
+RETURNS TABLE (
+    id NUMERIC,
+    name VARCHAR(100)
+) AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT USERS.id AS id, USERS.name AS name
+    FROM USER_LIST_DATA INNER JOIN
+    USERS ON USER_LIST_DATA.user_id = USERS.id
+    WHERE list_id = p_list_id;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION delete_list;
+CREATE OR REPLACE FUNCTION delete_list(p_list_id INTEGER)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_list_id IS NULL THEN
+        RAISE EXCEPTION 'List ID cannot be NULL';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
+        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
+    END IF;
+
+    DELETE FROM USER_LIST_DATA WHERE list_id = p_list_id;
+    DELETE FROM USER_LISTS WHERE ID = p_list_id;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION get_all_lists;
+CREATE OR REPLACE FUNCTION get_all_lists(p_user_id NUMERIC DEFAULT NULL)
+RETURNS SETOF USER_LISTS AS $$
+BEGIN
+    IF p_user_id IS NULL THEN
+        RETURN QUERY
+        SELECT *
+        FROM USER_LISTS
+        ORDER BY ID ASC;
+    ELSE
+        RETURN QUERY
+        SELECT *
+        FROM USER_LISTS
+        WHERE ID NOT IN (
+            SELECT list_id
+            FROM USER_LIST_DATA
+            WHERE user_id = p_user_id
+        )
+        ORDER BY ID ASC;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION edit_task;
+CREATE OR REPLACE FUNCTION edit_task(
+    p_id NUMERIC,
+    p_name VARCHAR,
+    p_text TEXT,
+    p_points INTEGER
+) RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_points IS NULL THEN
+        RAISE EXCEPTION 'Task points cannot be null';
+    END IF;
+
+    IF p_id IS NULL THEN
+        RAISE EXCEPTION 'Task id cannot be null';
+    END IF;
+
+    IF p_name IS NULL OR LENGTH(TRIM(p_name)) = 0 THEN
+        RAISE EXCEPTION 'Task name cannot be null or empty';
+    END IF;
+    
+    IF p_text IS NULL OR LENGTH(TRIM(p_text)) = 0 THEN
+        RAISE EXCEPTION 'Task text cannot be null or empty';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Tasks WHERE id = p_id) THEN
+        RAISE EXCEPTION 'Lesson with id % does not exist', p_id;
+    END IF;
+
+    UPDATE Tasks 
+    SET name = p_name, text = p_text, points = p_points
+    WHERE id = p_id;
+    
+    IF FOUND THEN
+        RETURN TRUE;
+    ELSE
+        RETURN FALSE;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION delete_full_task(p_task_id INTEGER)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_task_id IS NULL THEN
+        RAISE EXCEPTION 'Task id cannot be null';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM TASKS WHERE id = p_task_id) THEN
+        RAISE EXCEPTION 'Task with id % does not exist', p_task_id;
+    END IF;
+
+    DELETE FROM CONFIRM_TASKS WHERE task_id = p_task_id;
+    DELETE FROM TASKS WHERE id = p_task_id;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION delete_full_lesson(p_lesson_id INTEGER)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF p_lesson_id IS NULL THEN
+        RAISE EXCEPTION 'Lesson id cannot be null';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Lessons WHERE id = p_lesson_id) THEN
+        RAISE EXCEPTION 'Lesson with id % does not exist', p_lesson_id;
+    END IF;
+
+    DELETE FROM CONFIRM_LESSONS WHERE lesson_id = p_lesson_id;
+
+    DELETE FROM Lessons WHERE id = p_lesson_id;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE TASKS TO crypto_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE CONFIRM_TASKS TO crypto_admin;
+
+GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE Lessons TO crypto_admin;
+GRANT SELECT, INSERT, DELETE ON TABLE CONFIRM_LESSONS TO crypto_admin;
+
+GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE USER_LISTS TO crypto_admin;
+GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE USER_LIST_DATA TO crypto_admin;
+
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_list_data_id_seq TO crypto_admin;
+GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_lists_id_seq TO crypto_admin;
 
 GRANT SELECT ON TABLE TASKS TO crypto_user;
 GRANT SELECT, INSERT ON TABLE CONFIRM_TASKS to crypto_user;
@@ -784,276 +1011,326 @@ CREATE INDEX idx_confirm_tasks_user_id ON CONFIRM_TASKS(user_id);
 CREATE INDEX idx_users_name ON Users(name);
 CREATE INDEX idx_users_id ON Users(id);
 
-
-
-CREATE TABLE USER_LISTS (
-    ID SERIAL PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL
-);
-
-CREATE TABLE USER_LIST_DATA (
-    ID SERIAL PRIMARY KEY,
-    list_id INTEGER NOT NULL,
-    user_id NUMERIC NOT NULL,
-    FOREIGN KEY (list_id) REFERENCES USER_LISTS(ID)
-);
-
-DROP FUNCTION add_list;
-CREATE OR REPLACE FUNCTION add_list(p_name VARCHAR)
-RETURNS INTEGER AS $$
-DECLARE
-    new_list_id INTEGER;
+CREATE OR REPLACE FUNCTION add_points_to_referrer()
+RETURNS TRIGGER AS $$
 BEGIN
-    IF p_name IS NULL OR LENGTH(TRIM(p_name)) = 0 THEN
-        RAISE EXCEPTION 'List name cannot be empty';
+    IF NEW.wallet IS NOT NULL AND NEW.wallet <> '' AND (OLD.wallet IS NULL OR OLD.wallet = '') THEN
+        IF NEW.ref_id IS NOT NULL AND NEW.ref_id <> 0 THEN
+            UPDATE Users
+            SET ref_points = ref_points + 500
+            WHERE id = NEW.ref_id;
+        END IF;
     END IF;
-
-    IF EXISTS (SELECT 1 FROM USER_LISTS WHERE name = p_name) THEN
-        RAISE EXCEPTION 'Task with name % already exists', p_name;
-    END IF;
-
-    INSERT INTO USER_LISTS (name) VALUES (p_name) RETURNING ID INTO new_list_id;
-    RETURN new_list_id;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
-DROP FUNCTION add_user_to_list;
-CREATE OR REPLACE FUNCTION add_user_to_list(p_list_id INTEGER, p_user_id NUMERIC)
-RETURNS BOOLEAN AS $$
-BEGIN
-    IF p_list_id IS NULL OR p_user_id IS NULL THEN
-        RAISE EXCEPTION 'List ID and User ID cannot be NULL';
-    END IF;
+CREATE TRIGGER wallet_set_trigger
+AFTER UPDATE OF wallet
+ON Users
+FOR EACH ROW
+EXECUTE FUNCTION add_points_to_referrer();
 
-    IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = p_user_id) THEN
-        RAISE EXCEPTION 'User ID % does not exist', p_user_id;
-    END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
-        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
-    END IF;
 
-    INSERT INTO USER_LIST_DATA (list_id, user_id) VALUES (p_list_id, p_user_id);
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql;
 
---новое
-CREATE OR REPLACE FUNCTION add_users_to_list(
-    p_list_id INTEGER,
-    p_user_list NUMERIC[]
+
+
+
+
+
+
+--Изменения
+--предсатвление с суммой очков
+CREATE OR REPLACE VIEW UserPointsView AS
+SELECT 
+    Users.id AS user_id,
+    Users.name,
+    (Users.ref_points + Users.lesson_points + Users.task_points)::INTEGER AS total_points
+FROM Users;
+
+--предсатвление с суммой очков за месяц
+CREATE VIEW UserPointsByMonthView AS
+WITH PointsFromLessons AS (
+    SELECT 
+        cl.user_id,
+        SUM(l.points) AS lesson_points
+    FROM 
+        CONFIRM_LESSONS cl
+    JOIN 
+        Lessons l ON cl.lesson_id = l.id
+    WHERE 
+        DATE_TRUNC('month', cl.confirm_date) = DATE_TRUNC('month', CURRENT_DATE)
+    GROUP BY 
+        cl.user_id
+),
+PointsFromTasks AS (
+    SELECT 
+        ct.user_id,
+        SUM(t.points) AS task_points
+    FROM 
+        CONFIRM_TASKS ct
+    JOIN 
+        TASKS t ON ct.task_id = t.ID
+    WHERE 
+        DATE_TRUNC('month', ct.confirm_date) = DATE_TRUNC('month', CURRENT_DATE)
+    GROUP BY 
+        ct.user_id
 )
-RETURNS BOOLEAN AS $$
-DECLARE
-    link_user_id NUMERIC;
-BEGIN
-    IF p_list_id IS NULL THEN 
-        RAISE EXCEPTION 'List ID cannot be NULL';
-    END IF;
+SELECT 
+    u.id AS user_id,
+    u.name AS name,
+    u.wallet,
+    COALESCE(pl.lesson_points, 0) + COALESCE(pt.task_points, 0) + 
+    (SELECT COUNT(*) FROM Users AS ref_users 
+        WHERE ref_users.ref_id = u.id 
+            AND ref_users.wallet IS NOT NULL 
+            AND ref_users.wallet <> '' 
+            AND DATE_TRUNC('month', ref_users.reg_date) = DATE_TRUNC('month', CURRENT_DATE)
+    ) * 500 AS total_points
+FROM 
+    Users u
+LEFT JOIN 
+    PointsFromLessons pl ON u.id = pl.user_id
+LEFT JOIN 
+    PointsFromTasks pt ON u.id = pt.user_id
+ORDER BY 
+    total_points DESC;
 
-    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
-        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
-    END IF;
+--предсатвление с количествой рефералов
+CREATE OR REPLACE VIEW UserReferralCountView AS
+SELECT
+    users.id AS user_id, 
+    users.name, 
+    (SELECT COUNT(*) FROM users AS ref_users 
+        WHERE ref_users.ref_id = users.id 
+            AND ref_users.wallet IS NOT NULL 
+            AND ref_users.wallet <> ''
+    ) AS referral_count 
+FROM users;
 
-    FOREACH link_user_id IN ARRAY p_user_list LOOP
-        IF link_user_id IS NULL THEN
-            RAISE EXCEPTION 'User ID cannot be NULL';
-        END IF;
+--предсатвление с количествой рефералов за месяц
+CREATE OR REPLACE VIEW UserReferralCountByMonthView AS
+SELECT
+    users.id AS user_id, 
+    users.name, 
+    (SELECT COUNT(*) FROM users AS ref_users 
+        WHERE ref_users.ref_id = users.id 
+            AND ref_users.wallet IS NOT NULL 
+            AND ref_users.wallet <> '' 
+            AND DATE_TRUNC('month', ref_users.reg_date) = DATE_TRUNC('month', CURRENT_DATE)
+    ) AS referral_count 
+FROM users;
 
-        IF NOT EXISTS (SELECT 1 FROM Users WHERE Users.id = link_user_id) THEN
-            RAISE EXCEPTION 'User ID % does not exist', link_user_id;
-        END IF;
-
-        INSERT INTO USER_LIST_DATA (list_id, user_id) VALUES (p_list_id, link_user_id);
-    END LOOP;
-
-    RETURN TRUE;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE NOTICE 'An error occurred: %', SQLERRM;
-        RETURN FALSE;
-END;
-$$ LANGUAGE plpgsql;
-
---изменено
-DROP FUNCTION delete_user_from_list;
-CREATE OR REPLACE FUNCTION delete_user_from_list(p_list_id INTEGER, p_user_id NUMERIC)
-RETURNS BOOLEAN AS $$
-BEGIN
-    IF p_list_id IS NULL OR p_user_id IS NULL THEN
-        RAISE EXCEPTION 'List ID and User ID cannot be NULL';
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM USER_LIST_DATA WHERE list_id = p_list_id AND user_id = p_user_id) THEN
-        RAISE EXCEPTION 'User ID % not found in List ID %', p_user_id, p_list_id;
-    END IF;
-
-    DELETE FROM USER_LIST_DATA WHERE list_id = p_list_id AND user_id = p_user_id;
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP FUNCTION get_users_from_list;
-CREATE OR REPLACE FUNCTION get_users_from_list(p_list_id INTEGER)
+--получить топ по очкам
+CREATE OR REPLACE FUNCTION get_top_users(
+    input_user_id NUMERIC = NULL,
+    input_admin_id NUMERIC = NULL
+)
 RETURNS TABLE (
-    id NUMERIC,
-    name VARCHAR(100)
+    place BIGINT,
+    user_id NUMERIC,
+    name VARCHAR(255),
+    total_points INTEGER
 ) AS $$
 BEGIN
-    RETURN QUERY 
-    SELECT USERS.id AS id, USERS.name AS name
-    FROM USER_LIST_DATA INNER JOIN
-    USERS ON USER_LIST_DATA.user_id = USERS.id
-    WHERE list_id = p_list_id;
-END;
-$$ LANGUAGE plpgsql;
-
---изменено
-DROP FUNCTION delete_list;
-CREATE OR REPLACE FUNCTION delete_list(p_list_id INTEGER)
-RETURNS BOOLEAN AS $$
-BEGIN
-    IF p_list_id IS NULL THEN
-        RAISE EXCEPTION 'List ID cannot be NULL';
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM USER_LISTS WHERE ID = p_list_id) THEN
-        RAISE EXCEPTION 'List ID % does not exist', p_list_id;
-    END IF;
-
-    DELETE FROM USER_LIST_DATA WHERE list_id = p_list_id;
-    DELETE FROM USER_LISTS WHERE ID = p_list_id;
-
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP FUNCTION get_all_lists;
-CREATE OR REPLACE FUNCTION get_all_lists(p_user_id NUMERIC DEFAULT NULL)
-RETURNS SETOF USER_LISTS AS $$
-BEGIN
-    IF p_user_id IS NULL THEN
+    IF input_user_id IS NULL THEN
         RETURN QUERY
-        SELECT *
-        FROM USER_LISTS
-        ORDER BY ID ASC;
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY UserPointsView.total_points DESC) AS place,
+            UserPointsView.user_id,
+            UserPointsView.name,
+            UserPointsView.total_points
+        FROM UserPointsView
+        WHERE UserPointsView.user_id <> input_admin_id
+        ORDER BY UserPointsView.total_points DESC
+        LIMIT 10;
     ELSE
         RETURN QUERY
-        SELECT *
-        FROM USER_LISTS
-        WHERE ID NOT IN (
-            SELECT list_id
-            FROM USER_LIST_DATA
-            WHERE user_id = p_user_id
+        WITH RankedUsers AS (
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY UserPointsView.total_points DESC) AS place,
+                UserPointsView.user_id,
+                UserPointsView.name,
+                UserPointsView.total_points
+            FROM UserPointsView
+            WHERE UserPointsView.user_id <> input_admin_id
+            ORDER BY UserPointsView.total_points DESC
+        ),
+        TopUsers AS ( SELECT * FROM RankedUsers LIMIT 10 )
+        SELECT * FROM TopUsers
+        UNION ALL
+        SELECT * FROM RankedUsers WHERE RankedUsers.user_id = input_user_id
+        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+select * from get_top_users(6451534002, 468407757);
+
+--получить топ по рефералам
+CREATE OR REPLACE FUNCTION get_top_users_by_refs(
+    input_user_id NUMERIC = NULL,
+    input_admin_id NUMERIC = NULL
+)
+RETURNS TABLE (
+    place BIGINT,
+    user_id NUMERIC,
+    name VARCHAR(255),
+    referral_count BIGINT 
+) AS $$
+BEGIN
+    IF input_user_id IS NULL THEN
+        RETURN QUERY
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY UserReferralCountView.referral_count DESC) AS place,
+            UserReferralCountView.user_id, 
+            UserReferralCountView.name, 
+            UserReferralCountView.referral_count
+        FROM UserReferralCountView
+        WHERE UserReferralCountView.user_id <> input_admin_id
+        ORDER BY UserReferralCountView.referral_count DESC
+        LIMIT 10;
+    ELSE
+        RETURN QUERY
+        WITH RankedUsers AS (
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY UserReferralCountView.referral_count DESC) AS place,
+                UserReferralCountView.user_id, 
+                UserReferralCountView.name, 
+                UserReferralCountView.referral_count
+            FROM UserReferralCountView
+            WHERE UserReferralCountView.user_id <> input_admin_id
+            ORDER BY UserReferralCountView.referral_count DESC
+        ),
+        TopUsers AS (
+            SELECT * 
+            FROM RankedUsers 
+            ORDER BY RankedUsers.place 
+            LIMIT 10
         )
-        ORDER BY ID ASC;
+        SELECT * FROM TopUsers
+        UNION ALL
+        SELECT * FROM RankedUsers 
+        WHERE RankedUsers.user_id = input_user_id
+        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
     END IF;
 END;
 $$ LANGUAGE plpgsql;
 
-ALTER TABLE CONFIRM_LESSONS
-ADD CONSTRAINT fk_lesson_id
-FOREIGN KEY (lesson_id) REFERENCES Lessons(id)
-ON DELETE CASCADE;
+select * from get_top_users_by_refs(6451534002, 468407757);
 
-ALTER TABLE CONFIRM_LESSONS
-ADD CONSTRAINT fk_user_id
-FOREIGN KEY (user_id) REFERENCES Users(id)
-ON DELETE CASCADE;
 
-GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE USER_LISTS TO crypto_admin;
-GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE USER_LIST_DATA TO crypto_admin;
-
-GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_list_data_id_seq TO crypto_admin;
-GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_lists_id_seq TO crypto_admin;
-
-ALTER TABLE Lessons DROP CONSTRAINT unique_name;
-
-DROP FUNCTION edit_task;
-CREATE OR REPLACE FUNCTION edit_task(
-    p_id NUMERIC,
-    p_name VARCHAR,
-    p_text TEXT,
-    p_points INTEGER
-) RETURNS BOOLEAN AS $$
+--получить топ по очкам за месяц
+CREATE OR REPLACE FUNCTION get_top_users_month(
+    input_user_id NUMERIC = NULL,
+    input_admin_id NUMERIC = NULL
+)
+RETURNS TABLE (
+    place BIGINT,
+    user_id NUMERIC,
+    name VARCHAR(255),
+    total_points INTEGER
+) AS $$
 BEGIN
-    IF p_points IS NULL THEN
-        RAISE EXCEPTION 'Task points cannot be null';
-    END IF;
-
-    IF p_id IS NULL THEN
-        RAISE EXCEPTION 'Task id cannot be null';
-    END IF;
-
-    IF p_name IS NULL OR LENGTH(TRIM(p_name)) = 0 THEN
-        RAISE EXCEPTION 'Task name cannot be null or empty';
-    END IF;
-    
-    IF p_text IS NULL OR LENGTH(TRIM(p_text)) = 0 THEN
-        RAISE EXCEPTION 'Task text cannot be null or empty';
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM Tasks WHERE id = p_id) THEN
-        RAISE EXCEPTION 'Lesson with id % does not exist', p_id;
-    END IF;
-
-    UPDATE Tasks 
-    SET name = p_name, text = p_text, points = p_points
-    WHERE id = p_id;
-    
-    IF FOUND THEN
-        RETURN TRUE;
+    IF input_user_id IS NULL THEN
+        RETURN QUERY
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY UserPointsByMonthView.total_points DESC) AS place,
+            UserPointsByMonthView.user_id,
+            UserPointsByMonthView.name,
+            UserPointsByMonthView.total_points::INTEGER
+        FROM UserPointsByMonthView
+        WHERE UserPointsByMonthView.user_id <> input_admin_id
+        ORDER BY UserPointsByMonthView.total_points DESC
+        LIMIT 10;
     ELSE
-        RETURN FALSE;
+        RETURN QUERY
+        WITH RankedUsers AS (
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY UserPointsByMonthView.total_points DESC) AS place,
+                UserPointsByMonthView.user_id,
+                UserPointsByMonthView.name,
+                UserPointsByMonthView.total_points::INTEGER
+            FROM UserPointsByMonthView
+            WHERE UserPointsByMonthView.user_id <> input_admin_id
+            ORDER BY UserPointsByMonthView.total_points DESC
+        ),
+        TopUsers AS ( SELECT * FROM RankedUsers LIMIT 10 )
+        SELECT * FROM TopUsers
+        UNION ALL
+        SELECT * FROM RankedUsers WHERE RankedUsers.user_id = input_user_id
+        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
     END IF;
 END;
 $$ LANGUAGE plpgsql;
 
-ALTER TABLE USER_LISTS
-ADD CONSTRAINT unique_list_name UNIQUE (name);
-
---изменено
-CREATE OR REPLACE FUNCTION delete_full_task(p_task_id INTEGER)
-RETURNS BOOLEAN AS $$
+--получить топ по рефералам за месяц
+CREATE OR REPLACE FUNCTION get_top_users_by_refs_month(
+    input_user_id NUMERIC = NULL,
+    input_admin_id NUMERIC = NULL
+)
+RETURNS TABLE (
+    place BIGINT,
+    user_id NUMERIC,
+    name VARCHAR(255),
+    referral_count BIGINT 
+) AS $$
 BEGIN
-    IF p_task_id IS NULL THEN
-        RAISE EXCEPTION 'Task id cannot be null';
+    IF input_user_id IS NULL THEN
+        RETURN QUERY
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY UserReferralCountByMonthView.referral_count DESC) AS place,
+            UserReferralCountByMonthView.user_id, 
+            UserReferralCountByMonthView.name, 
+            UserReferralCountByMonthView.referral_count
+        FROM UserReferralCountByMonthView
+        WHERE UserReferralCountByMonthView.user_id <> input_admin_id
+        ORDER BY UserReferralCountByMonthView.referral_count DESC
+        LIMIT 10;
+    ELSE
+        RETURN QUERY
+        WITH RankedUsers AS (
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY UserReferralCountByMonthView.referral_count DESC) AS place,
+                UserReferralCountByMonthView.user_id, 
+                UserReferralCountByMonthView.name, 
+                UserReferralCountByMonthView.referral_count
+            FROM UserReferralCountByMonthView
+            WHERE UserReferralCountByMonthView.user_id <> input_admin_id
+            ORDER BY UserReferralCountByMonthView.referral_count DESC
+        ),
+        TopUsers AS (
+            SELECT * 
+            FROM RankedUsers 
+            ORDER BY RankedUsers.place 
+            LIMIT 10
+        )
+        SELECT * FROM TopUsers
+        UNION ALL
+        SELECT * FROM RankedUsers 
+        WHERE RankedUsers.user_id = input_user_id
+        AND RankedUsers.user_id NOT IN (SELECT TopUsers.user_id FROM TopUsers);
     END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM TASKS WHERE id = p_task_id) THEN
-        RAISE EXCEPTION 'Task with id % does not exist', p_task_id;
-    END IF;
-
-    DELETE FROM CONFIRM_TASKS WHERE task_id = p_task_id;
-    DELETE FROM TASKS WHERE id = p_task_id;
-
-    RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql;
 
---изменено
-CREATE OR REPLACE FUNCTION delete_full_lesson(p_lesson_id INTEGER)
-RETURNS BOOLEAN AS $$
-BEGIN
-    IF p_lesson_id IS NULL THEN
-        RAISE EXCEPTION 'Lesson id cannot be null';
-    END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM Lessons WHERE id = p_lesson_id) THEN
-        RAISE EXCEPTION 'Lesson with id % does not exist', p_lesson_id;
-    END IF;
 
-    DELETE FROM CONFIRM_LESSONS WHERE lesson_id = p_lesson_id;
+ALTER TABLE CONFIRM_TASKS
+ADD COLUMN confirm_date DATE DEFAULT CURRENT_DATE;
 
-    DELETE FROM Lessons WHERE id = p_lesson_id;
+ALTER TABLE CONFIRM_LESSONS
+ADD COLUMN confirm_date DATE DEFAULT CURRENT_DATE;
 
-    RETURN TRUE;
-END;
-$$ LANGUAGE plpgsql;
+GRANT SELECT ON userreferralcountview TO crypto_admin;
+GRANT SELECT ON userreferralcountview TO crypto_user; 
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE TASKS TO crypto_admin;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE CONFIRM_TASKS TO crypto_admin;
+GRANT SELECT ON userpointsview TO crypto_admin;
+GRANT SELECT ON userpointsview TO crypto_user; 
 
-GRANT SELECT, UPDATE, INSERT, DELETE ON TABLE Lessons TO crypto_admin;
-GRANT SELECT, INSERT, DELETE ON TABLE CONFIRM_LESSONS TO crypto_admin;
+GRANT SELECT ON UserReferralCountByMonthView TO crypto_admin;
+GRANT SELECT ON UserReferralCountByMonthView TO crypto_user; 
+
+GRANT SELECT ON userpointsbymonthview TO crypto_admin;
+GRANT SELECT ON userpointsbymonthview TO crypto_user; 

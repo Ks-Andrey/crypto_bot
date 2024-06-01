@@ -96,8 +96,13 @@ class UserRepository {
         }
     }
     
-    async getTopUsers(userId = null, adminId = this.adminId) {
+    async getTopUsers(userId = null, adminId = this.adminId, month = false) {
         try {
+            if (month) {
+                const result = await this.client.query('SELECT * FROM get_top_users_month($1, $2)', [userId, adminId]);
+                return result.rows;
+            } 
+
             const result = await this.client.query('SELECT * FROM get_top_users($1, $2)', [userId, adminId]);
             return result.rows;
         } catch (error) {
@@ -105,8 +110,13 @@ class UserRepository {
         }
     }
 
-    async getTopUsersByRefs(userId = null, adminId = this.adminId) {
+    async getTopUsersByRefs(userId = null, adminId = this.adminId, month = false) {
         try {
+            if (month) {
+                const result = await this.client.query('SELECT * FROM get_top_users_by_refs_month($1, $2)', [userId, adminId]);
+                return result.rows;
+            }
+
             const result = await this.client.query('SELECT * FROM get_top_users_by_refs($1, $2)', [userId, adminId]);
             return result.rows;
         } catch (error) {

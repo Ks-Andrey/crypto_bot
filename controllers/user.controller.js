@@ -177,13 +177,33 @@ class UserController {
     async getAllStatistics(req, res) {
         try {
             const statistics = await this.adminRepository.getAllStatistics();
-            const topRefs = await this.adminRepository.getTopUsersByRefs(null);
-            const topUsers = await this.adminRepository.getTopUsers(null);
-            res.json({ statistics, topRefs, topUsers });
+            res.json(statistics);
         } catch (error) {
             res.status(500).json({ error: error.message });
         }
     }
+
+    async getTopUsersByPoints(req, res) {
+        const isMonth = req?.body?.month || false;
+
+        try {
+            const users = await this.adminRepository.getTopUsers(null, undefined, isMonth);
+            res.json(users);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    } 
+
+    async getTopUsersByRefs(req, res) {
+        const isMonth = req?.body?.month || false;
+
+        try {
+            const users = await this.adminRepository.getTopUsersByRefs(null, undefined, isMonth);
+            res.json(users);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    } 
 }
 
 module.exports = UserController;
